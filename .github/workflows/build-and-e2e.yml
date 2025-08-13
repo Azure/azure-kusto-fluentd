@@ -1,10 +1,13 @@
 name: build-and-e2e
 on:
-  push
+  push:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
 jobs:
   build_and_e2e:
     name: Build, Test, and E2E Fluentd Plugin
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     environment: build
     permissions:
       checks: write
@@ -13,6 +16,7 @@ jobs:
       contents: read
     steps:
       - name: Azure login
+        if: github.event_name != 'pull_request'
         uses: azure/login@v2
         with:
           client-id: ${{ secrets.APP_ID }}
@@ -26,25 +30,24 @@ jobs:
           ruby-version: '3.1'
       - name: Install dependencies
         run: bundle install
-        working-directory: azure-kusto-fluentd
+        working-directory: .
       - name: Run unit tests
         run: bundle exec rake test TEST="test/plugin/test_out_kusto_*.rb"
-        working-directory: azure-kusto-fluentd
+        working-directory: .
       - name: Build gem
         run: gem build azure-kusto-fluentd.gemspec
-        working-directory: azure-kusto-fluentd
+        working-directory: .
       - name: Install Fluentd
         run: gem install fluentd
       - name: Install plugin
-        run: gem install azure-kusto-fluentd/azure-kusto-fluentd-*.gem
+        run: gem install azure-kusto-fluentd-*.gem
       - name: Print environment variables
         run: env | grep ENDPOINT
       - name: Run e2e
         run: bundle exec rake test TEST="test/plugin/test_e2e_kusto.rb"
-        working-directory: azure-kusto-fluentd
+        working-directory: .
       - name: Publish Unit Test Results 
         uses: EnricoMi/publish-unit-test-result-action@v1.6
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           files: rspec.xml
- 

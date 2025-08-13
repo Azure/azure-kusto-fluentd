@@ -12,7 +12,7 @@ jobs:
       id-token: write
       packages: write
     name: Upload Release Asset
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     environment: build
     steps:
       - name: Set up Ruby
@@ -26,7 +26,7 @@ jobs:
 
       - name: Build gem
         run: gem build azure-kusto-fluentd.gemspec
-        working-directory: azure-kusto-fluentd
+        working-directory: .
 
       - name: Publish gem to RubyGems
         uses: dawidd6/action-publish-gem@v1
@@ -39,4 +39,4 @@ jobs:
         run: |
           ARTIFACT_PATH=$(find . -maxdepth 1 -iname 'azure-kusto-fluentd-*.gem')
           echo "artifact_name=$ARTIFACT_PATH" >> $GITHUB_OUTPUT
-        working-directory: azure-kusto-fluentd
+        working-directory: .
