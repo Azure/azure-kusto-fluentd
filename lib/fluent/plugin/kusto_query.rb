@@ -6,9 +6,6 @@
 require 'net/http'
 require 'uri'
 require 'json'
-require 'azure/storage/blob'
-require 'azure/storage/queue'
-require 'azure/storage/table'
 require 'securerandom'
 require 'base64'
 
