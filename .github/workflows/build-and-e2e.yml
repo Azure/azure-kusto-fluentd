@@ -1,0 +1,50 @@
+name: build-and-e2e
+on:
+  push
+jobs:
+  build_and_e2e:
+    name: Build, Test, and E2E Fluentd Plugin
+    runs-on: self-hosted
+    environment: build
+    permissions:
+      checks: write
+      pull-requests: write
+      id-token: write
+      contents: read
+    steps:
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.APP_ID }}
+          tenant-id: ${{ secrets.AUTH_ID }}
+          subscription-id: ${{ secrets.SUBSCRIPTION_ID }}
+      - name: Checkout code
+        uses: actions/checkout@v3
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.1'
+      - name: Install dependencies
+        run: bundle install
+        working-directory: azure-kusto-fluentd
+      - name: Run unit tests
+        run: bundle exec rake test TEST="test/plugin/test_out_kusto_*.rb"
+        working-directory: azure-kusto-fluentd
+      - name: Build gem
+        run: gem build azure-kusto-fluentd.gemspec
+        working-directory: azure-kusto-fluentd
+      - name: Install Fluentd
+        run: gem install fluentd
+      - name: Install plugin
+        run: gem install azure-kusto-fluentd/azure-kusto-fluentd-*.gem
+      - name: Print environment variables
+        run: env | grep ENDPOINT
+      - name: Run e2e
+        run: bundle exec rake test TEST="test/plugin/test_e2e_kusto.rb"
+        working-directory: azure-kusto-fluentd
+      - name: Publish Unit Test Results 
+        uses: EnricoMi/publish-unit-test-result-action@v1.6
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          files: rspec.xml
+ 
