@@ -31,7 +31,7 @@ module Fluent
       config_param :azure_cloud, :string, default: 'AzureCloud'
       config_param :compression_enabled, :bool, default: true
       config_param :logger_path, :string, default: nil
-      config_param :auth_type, :string, desc: 'Authentication type to use for Kusto. Options: "aad", "user_managed_identity", "system_managed_identity", "workload_identity".'
+      config_param :auth_type, :string, default: 'aad', desc: 'Authentication type to use for Kusto. Options: "aad", "user_managed_identity", "system_managed_identity", "workload_identity".'
       config_param :workload_identity_client_id, :string, default: nil, secret: true, desc: 'Client ID for workload identity authentication.'
       config_param :workload_identity_tenant_id, :string, default: nil, secret: true, desc: 'Tenant ID for workload identity authentication.'
       config_param :workload_identity_token_file_path, :string, default: nil, secret: true, desc: 'File path for workload identity token.'
@@ -64,6 +64,8 @@ module Fluent
         @database_name = @outconfiguration&.database_name
         @shutdown_called = false
         @deferred_threads = []
+        @plugin_start_time = Time.now
+        @total_bytes_ingested = 0
       end
 
       def format(tag, time, record)
