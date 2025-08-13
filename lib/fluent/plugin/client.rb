@@ -7,7 +7,7 @@
 # - Authenticating using Managed Identity or AAD Client Credentials
 # - Fetching and caching Kusto ingestion resources
 # - Providing access to blob SAS URI, queue SAS URI, and identity token
-require_relative 'tokenprovider2'
+require_relative 'tokenprovider'
 require_relative 'managed_identity'
 require_relative 'kusto_query'
 require 'logger'

@@ -23,15 +23,7 @@ jobs:
 
       - name: Checkout code
         uses: actions/checkout@v3
-        with:
-            ref: users/komal/feature/kusto_plugin 
-            persist-credentials: true
 
-      - name: List files
-        run: ls -l
-      - name: List plugin directory
-        run: ls -l azure-kusto-fluentd
-        
       - name: Build gem
         run: gem build azure-kusto-fluentd.gemspec
         working-directory: azure-kusto-fluentd
