@@ -246,38 +246,21 @@ class KustoOutputTryWriteTest < Test::Unit::TestCase
   # Removed test cases: unique_id as integer, unique_id as array, tag as empty string, unique_id with special characters, ignores return value
 
   test 'try_write handles check_data_on_server always false (thread keeps running)' do
-    conf = <<-CONF
-      @type kusto
-      endpoint https://example.kusto.windows.net
-      database_name testdb
-      table_name testtable
-      client_id dummy-client-id
-      client_secret dummy-secret
-      tenant_id dummy-tenant
-      auth_type aad
-      buffered true
-      delayed true
-    CONF
-    driver = Fluent::Test::Driver::Output.new(Fluent::Plugin::KustoOutput).configure(conf)
-    begin
-      ingester_mock = ingester_stub
-      ingester_mock.expects(:upload_data_to_blob_and_queue).once
-      logger_mock = mock
-      logger_mock.stubs(:debug)
-      logger_mock.stubs(:error)
-      driver.instance.instance_variable_set(:@ingester, ingester_mock)
-      driver.instance.instance_variable_set(:@logger, logger_mock)
-      driver.instance.stubs(:check_data_on_server).returns(false)
-      chunk = mock
-      chunk.stubs(:read).returns('testdata')
-      chunk.stubs(:metadata).returns(OpenStruct.new(tag: 'test.tag'))
-      chunk.stubs(:unique_id).returns('uniqueid'.b)
-      # We can't join the thread, but we can at least ensure no exception is raised
-      assert_nothing_raised { @driver.instance.try_write(chunk) }
-      sleep 1.2
-    ensure
-      driver.instance.shutdown if driver && driver.instance
-    end
+    ingester_mock = mock
+    ingester_mock.expects(:upload_data_to_blob_and_queue).once
+    logger_mock = mock
+    logger_mock.stubs(:debug)
+    logger_mock.stubs(:error)
+    @driver.instance.instance_variable_set(:@ingester, ingester_mock)
+    @driver.instance.instance_variable_set(:@logger, logger_mock)
+    @driver.instance.stubs(:check_data_on_server).returns(false)
+    chunk = mock
+    chunk.stubs(:read).returns('testdata')
+    chunk.stubs(:metadata).returns(OpenStruct.new(tag: 'test.tag'))
+    chunk.stubs(:unique_id).returns('uniqueid'.b)
+    # We can't join the thread, but we can at least ensure no exception is raised
+    assert_nothing_raised { @driver.instance.try_write(chunk) }
+    sleep 1.2
   end
 
   # Test that logger.debug and logger.error are called on success and error
@@ -362,7 +345,7 @@ class KustoOutputTryWriteTest < Test::Unit::TestCase
       tenant_id dummy-tenant
       buffered true
       delayed false
-      auth_type aad      
+      auth_type aad
     CONF
     ingester_mock = mock
     ingester_mock.expects(:upload_data_to_blob_and_queue).once
