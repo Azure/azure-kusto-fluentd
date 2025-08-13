@@ -100,7 +100,7 @@ class Client
     when 'user_managed_identity', 'system_managed_identity'
       ManagedIdentityTokenProvider.new(outconfiguration)
     else
-      raise "Unknown auth_type: \\#{outconfiguration.auth_type}"
+      raise "Unknown auth_type: #{outconfiguration.auth_type}"
     end
   end
 
