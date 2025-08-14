@@ -25,6 +25,8 @@ class KustoE2ETest < Test::Unit::TestCase
       azure_cloud: 'AzureCloud'
     }
     case @auth_type
+    when 'azcli'
+      opts[:auth_type] = 'azcli'
     when 'workload_identity'
       opts[:auth_type] = 'workload_identity'
       opts[:workload_identity_client_id] = @wi_client_id
@@ -135,6 +137,10 @@ class KustoE2ETest < Test::Unit::TestCase
     @wi_tenant_id = ENV['WORKLOAD_IDENTITY_TENANT_ID'] || @tenant_id
     @wi_token_file = ENV['WORKLOAD_IDENTITY_TOKEN_FILE'] || ENV['AZURE_FEDERATED_TOKEN_FILE'] || ''
     @auth_lines = case @auth_type
+    when 'azcli'
+      <<-AUTH
+      auth_type azcli
+      AUTH
     when 'workload_identity'
       <<-AUTH
       auth_type workload_identity

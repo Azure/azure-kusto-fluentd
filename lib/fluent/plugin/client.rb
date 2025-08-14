@@ -9,8 +9,11 @@
 # - Providing access to blob SAS URI, queue SAS URI, and identity token
 require_relative 'auth/aad_tokenprovider'
 require_relative 'auth/mi_tokenprovider'
+require_relative 'auth/azcli_tokenprovider'
+require_relative 'auth/wif_tokenprovider'
 require_relative 'kusto_query'
 require 'logger'
+
 class Client
   def initialize(outconfiguration)
     # Set up queries for resource fetching
@@ -93,9 +96,9 @@ class Client
   def create_token_provider(outconfiguration)
     case outconfiguration.auth_type&.downcase
     when 'aad'
-      AadTokenProvider.new(outconfiguration)
+    when 'azcli'
+      return AzCliTokenProvider.new(outconfiguration)
     when 'workload_identity'
-      require_relative 'auth/wif_tokenprovider'
       WorkloadIdentity.new(outconfiguration)
     when 'user_managed_identity', 'system_managed_identity'
       ManagedIdentityTokenProvider.new(outconfiguration)
