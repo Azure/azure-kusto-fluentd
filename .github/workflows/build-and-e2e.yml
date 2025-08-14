@@ -1,0 +1,83 @@
+name: build-and-e2e
+on:
+  push:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+jobs:
+  build_and_e2e:
+    name: Build, Test, and E2E Fluentd Plugin
+    runs-on: ubuntu-latest
+    environment: build
+    timeout-minutes: 30
+    permissions:
+      checks: write
+      pull-requests: write
+      id-token: write
+      contents: read
+    env:
+      ENDPOINT: ${{ secrets.ENDPOINT }}
+      TEST_DATABASE_NAME: ${{ secrets.TEST_DATABASE_NAME }}
+      TENANT_ID: ${{ secrets.TENANT_ID }}
+      WORKLOAD_IDENTITY_CLIENT_ID: ${{ secrets.WORKLOAD_IDENTITY_CLIENT_ID }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Get GitHub OIDC token for Azure
+        id: azure-token
+        run: |
+          OIDC_TOKEN=$(curl -sS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=api://AzureADTokenExchange" | jq -r '.value')
+          echo "::add-mask::$OIDC_TOKEN"
+          echo "$OIDC_TOKEN" > /tmp/azure_federated_token
+          
+      - name: Configure Kusto auth for Workload Identity
+        run: |
+          echo "AUTH_TYPE=workload_identity" >> $GITHUB_ENV
+          echo "WORKLOAD_IDENTITY_TOKEN_FILE=/tmp/azure_federated_token" >> $GITHUB_ENV
+          echo "WORKLOAD_IDENTITY_TENANT_ID=${TENANT_ID}" >> $GITHUB_ENV
+        
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.1'
+          bundler-cache: true
+          cache-version: 1
+          
+      - name: Configure bundler
+        run: |
+          bundle config set --local frozen false
+          bundle config set --local deployment false
+          
+      - name: Install dependencies
+        run: bundle install
+        working-directory: .
+        
+      - name: Run unit tests
+        run: bundle exec rake test TEST="test/plugin/test_out_kusto_*.rb"
+        working-directory: .
+        timeout-minutes: 10
+        
+      - name: Build gem
+        run: gem build azure-kusto-fluentd.gemspec
+        working-directory: .
+        
+      - name: Install Fluentd
+        run: gem install fluentd
+        
+      - name: Install plugin
+        run: gem install azure-kusto-fluentd-*.gem
+        
+      - name: Run e2e
+        run: bundle exec rake test TEST="test/plugin/test_e2e_kusto.rb"
+        working-directory: .
+        timeout-minutes: 15
+      - name: Publish Unit Test Results 
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        if: always()
+        with:
+          files: |
+            **/test-results.xml
+            **/rspec.xml
+            **/TEST-*.xml

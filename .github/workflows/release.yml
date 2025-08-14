@@ -1,0 +1,42 @@
+name: Deploy and Create Release
+on:
+  workflow_dispatch:
+  release:
+    types: [released]
+jobs:
+  build:
+    permissions:
+      contents: read
+      checks: write
+      pull-requests: write
+      id-token: write
+      packages: write
+    name: Upload Release Asset
+    runs-on: ubuntu-latest
+    environment: build
+    steps:
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.1'
+          bundler-cache: true
+
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Build gem
+        run: gem build azure-kusto-fluentd.gemspec
+        working-directory: .
+
+      - name: Publish gem to RubyGems
+        uses: dawidd6/action-publish-gem@v1
+        with:
+          api_key: ${{ secrets.RUBYGEMS_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: Set artifact name
+        id: set_artifact_name
+        run: |
+          ARTIFACT_PATH=$(find . -maxdepth 1 -iname 'azure-kusto-fluentd-*.gem')
+          echo "artifact_name=$ARTIFACT_PATH" >> $GITHUB_OUTPUT
+        working-directory: .
