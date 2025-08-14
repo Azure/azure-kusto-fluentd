@@ -34,6 +34,12 @@ jobs:
         with:
           ruby-version: '3.1'
           bundler-cache: true
+          cache-version: 1
+          
+      - name: Configure bundler
+        run: |
+          bundle config set --local frozen false
+          bundle config set --local deployment false
           
       - name: Install dependencies
         run: bundle install
