@@ -7,8 +7,9 @@ on:
 jobs:
   build_and_e2e:
     name: Build, Test, and E2E Fluentd Plugin
-    runs-on: [self-hosted, linux, azure-mi]
+    runs-on: ubuntu-latest
     environment: build
+    timeout-minutes: 30
     permissions:
       checks: write
       pull-requests: write
@@ -26,29 +27,43 @@ jobs:
         run: |
           echo "AUTH_TYPE=user_managed_identity" >> $GITHUB_ENV
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
+        
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: '3.1'
+          bundler-cache: true
+          
       - name: Install dependencies
         run: bundle install
         working-directory: .
+        
       - name: Run unit tests
         run: bundle exec rake test TEST="test/plugin/test_out_kusto_*.rb"
         working-directory: .
+        timeout-minutes: 10
+        
       - name: Build gem
         run: gem build azure-kusto-fluentd.gemspec
         working-directory: .
+        
       - name: Install Fluentd
         run: gem install fluentd
+        
       - name: Install plugin
         run: gem install azure-kusto-fluentd-*.gem
+        
       - name: Run e2e
         run: bundle exec rake test TEST="test/plugin/test_e2e_kusto.rb"
         working-directory: .
+        timeout-minutes: 15
+        continue-on-error: true
       - name: Publish Unit Test Results 
-        uses: EnricoMi/publish-unit-test-result-action@v1.6
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        if: always()
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          files: rspec.xml
+          files: |
+            **/test-results.xml
+            **/rspec.xml
+            **/TEST-*.xml
