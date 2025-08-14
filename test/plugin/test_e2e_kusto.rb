@@ -17,16 +17,28 @@ class KustoE2ETest < Test::Unit::TestCase
 
   def get_access_token
     # Use the same logic as the plugin's Ingester class
-    outconfig = OutputConfiguration.new(
-      client_app_id: @client_id,
-      client_app_secret: @client_secret,
+    opts = {
       tenant_id: @tenant_id,
       kusto_endpoint: @engine_url,
       database_name: @database,
       table_name: @table,
-      azure_cloud: 'AzureCloud',
-      managed_identity_client_id: @managed_identity_client_id
-    )
+      azure_cloud: 'AzureCloud'
+    }
+    case @auth_type
+    when 'workload_identity'
+      opts[:auth_type] = 'workload_identity'
+      opts[:workload_identity_client_id] = @wi_client_id
+      opts[:workload_identity_tenant_id] = @wi_tenant_id
+      opts[:workload_identity_token_file_path] = @wi_token_file
+    when 'user_managed_identity', 'system_managed_identity'
+      opts[:auth_type] = @auth_type
+      opts[:managed_identity_client_id] = @managed_identity_client_id
+    else
+      opts[:auth_type] = 'aad'
+      opts[:client_app_id] = @client_id
+      opts[:client_app_secret] = @client_secret
+    end
+    outconfig = OutputConfiguration.new(opts)
     ingester = Ingester.new(outconfig)
     def ingester.access_token
       @client.token_provider.aad_token_bearer
@@ -118,6 +130,31 @@ class KustoE2ETest < Test::Unit::TestCase
     @client_secret = ENV['CLIENT_SECRET'] || ''
     @tenant_id = ENV['TENANT_ID'] || ''
     @managed_identity_client_id = ENV['MANAGED_IDENTITY_CLIENT_ID'] || ''
+    @auth_type = (ENV['AUTH_TYPE'] || 'aad').downcase
+    @wi_client_id = ENV['WORKLOAD_IDENTITY_CLIENT_ID'] || ''
+    @wi_tenant_id = ENV['WORKLOAD_IDENTITY_TENANT_ID'] || @tenant_id
+    @wi_token_file = ENV['WORKLOAD_IDENTITY_TOKEN_FILE'] || ENV['AZURE_FEDERATED_TOKEN_FILE'] || ''
+    @auth_lines = case @auth_type
+    when 'workload_identity'
+      <<-AUTH
+      auth_type workload_identity
+      workload_identity_client_id #{@wi_client_id}
+      workload_identity_tenant_id #{@wi_tenant_id}
+      workload_identity_token_file_path #{@wi_token_file}
+      AUTH
+    when 'user_managed_identity', 'system_managed_identity'
+      <<-AUTH
+      auth_type #{@auth_type}
+      managed_identity_client_id #{@managed_identity_client_id}
+      AUTH
+    else
+      <<-AUTH
+      auth_type aad
+      tenant_id #{@tenant_id}
+      client_id #{@client_id}
+      client_secret #{@client_secret}
+      AUTH
+    end
     @conf = <<-CONF
       @type kusto
       @log_level debug
@@ -126,10 +163,7 @@ class KustoE2ETest < Test::Unit::TestCase
       endpoint #{@engine_url}
       database_name #{@database}
       table_name #{@table}
-      tenant_id #{@tenant_id}
-      client_id #{@client_id}
-      client_secret #{@client_secret}
-      managed_identity_client_id #{@managed_identity_client_id}
+      #{@auth_lines}
     CONF
     @driver = Fluent::Test::Driver::Output.new(Fluent::Plugin::KustoOutput).configure(@conf)
     @driver.instance.instance_variable_set(:@logger, Logger.new($stdout))
@@ -168,10 +202,7 @@ class KustoE2ETest < Test::Unit::TestCase
       endpoint #{@engine_url}
       database_name #{@database}
       table_name #{@table}
-      tenant_id #{@tenant_id}
-      client_id #{@client_id}
-      client_secret #{@client_secret}
-      managed_identity_client_id #{@managed_identity_client_id}
+      #{@auth_lines}
     CONF
     @driver = Fluent::Test::Driver::Output.new(Fluent::Plugin::KustoOutput).configure(@conf)
     @driver.instance.instance_variable_set(:@logger, Logger.new($stdout))
@@ -220,10 +251,7 @@ class KustoE2ETest < Test::Unit::TestCase
       endpoint #{@engine_url}
       database_name #{@database}
       table_name #{@table}
-      tenant_id #{@tenant_id}
-      client_id #{@client_id}
-      client_secret #{@client_secret}
-      managed_identity_client_id #{@managed_identity_client_id}
+      #{@auth_lines}
       <buffer>
         @type memory
         flush_interval 1s
@@ -275,10 +303,7 @@ class KustoE2ETest < Test::Unit::TestCase
       endpoint #{@engine_url}
       database_name #{@database}
       table_name #{@table}
-      tenant_id #{@tenant_id}
-      client_id #{@client_id}
-      client_secret #{@client_secret}
-      managed_identity_client_id #{@managed_identity_client_id}
+      #{@auth_lines}
       <buffer>
         @type memory
         flush_interval 1s
@@ -345,10 +370,7 @@ class KustoE2ETest < Test::Unit::TestCase
       endpoint #{@engine_url}
       database_name #{@database}
       table_name #{@table}
-      tenant_id #{@tenant_id}
-      client_id #{@client_id}
-      client_secret #{@client_secret}
-      managed_identity_client_id #{@managed_identity_client_id}
+      #{@auth_lines}
       <buffer>
         @type memory
         flush_interval 1s

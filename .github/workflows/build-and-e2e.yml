@@ -7,21 +7,24 @@ on:
 jobs:
   build_and_e2e:
     name: Build, Test, and E2E Fluentd Plugin
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, azure-mi]
     environment: build
     permissions:
       checks: write
       pull-requests: write
       id-token: write
       contents: read
+    env:
+      ENDPOINT: ${{ secrets.ENDPOINT }}
+      TEST_DATABASE_NAME: ${{ secrets.TEST_DATABASE_NAME }}
+      CLIENT_ID: ${{ secrets.CLIENT_ID }}
+      CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
+      TENANT_ID: ${{ secrets.TENANT_ID }}
+      MANAGED_IDENTITY_CLIENT_ID: ${{ secrets.MANAGED_IDENTITY_CLIENT_ID }}
     steps:
-      - name: Azure login
-        if: github.event_name != 'pull_request'
-        uses: azure/login@v2
-        with:
-          client-id: ${{ secrets.APP_ID }}
-          tenant-id: ${{ secrets.AUTH_ID }}
-          subscription-id: ${{ secrets.SUBSCRIPTION_ID }}
+      - name: Configure Kusto auth for User Assigned Managed Identity
+        run: |
+          echo "AUTH_TYPE=user_managed_identity" >> $GITHUB_ENV
       - name: Checkout code
         uses: actions/checkout@v3
       - name: Set up Ruby
@@ -41,8 +44,6 @@ jobs:
         run: gem install fluentd
       - name: Install plugin
         run: gem install azure-kusto-fluentd-*.gem
-      - name: Print environment variables
-        run: env | grep ENDPOINT
       - name: Run e2e
         run: bundle exec rake test TEST="test/plugin/test_e2e_kusto.rb"
         working-directory: .
