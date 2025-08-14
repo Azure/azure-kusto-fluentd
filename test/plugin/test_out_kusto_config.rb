@@ -3,6 +3,7 @@
 
 require_relative '../helper'
 require 'fluent/plugin/out_kusto'
+require 'fluent/plugin/conffile'
 
 class KustoOutputConfigTest < Test::Unit::TestCase
   def setup
