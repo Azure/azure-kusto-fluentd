@@ -26,8 +26,11 @@ class AzCliTokenProvider < AbstractTokenProvider
 
   def acquire_token(resource)
     az_cli = locate_azure_cli
-    cmd = "#{az_cli} account get-access-token --resource #{Shellwords.escape(resource)} --output json"
-    stdout, stderr, status = Open3.capture3(cmd)
+    # Properly escape the Azure CLI executable path to prevent command injection
+    escaped_az_cli = Shellwords.escape(az_cli)
+    escaped_resource = Shellwords.escape(resource)
+    cmd = [escaped_az_cli, 'account', 'get-access-token', '--resource', escaped_resource, '--output', 'json']
+    stdout, stderr, status = Open3.capture3(*cmd)
     unless status.success?
       raise "Failed to acquire Azure CLI token: #{stderr.strip}"
     end

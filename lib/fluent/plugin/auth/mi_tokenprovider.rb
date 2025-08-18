@@ -10,6 +10,7 @@
 require 'net/http'
 require 'uri'
 require 'json'
+require 'erb'
 require_relative 'tokenprovider_base'
 
 class ManagedIdentityTokenProvider < AbstractTokenProvider
@@ -36,14 +37,14 @@ class ManagedIdentityTokenProvider < AbstractTokenProvider
       "#{name}=#{value}"
   end
 
-  def token_request_params_set(_outconfiguration)
+  def token_request_params_set(outconfiguration)
       token_acquire_url = IMDS_TOKEN_ACQUIRE_URL.dup + "?" + append_header('resource', ERB::Util.url_encode(outconfiguration.kusto_endpoint)) + '&' + append_header('api-version', '2018-02-01')
       token_acquire_url = (token_acquire_url + '&' + append_header('object_id', ERB::Util.url_encode(@object_id))) unless @object_id.nil?
       token_acquire_url = (token_acquire_url + '&' + append_header('msi_res_id', ERB::Util.url_encode(@msi_res_id))) unless @msi_res_id.nil?
-      url = URI.parse(token_acquire_url)
-    if @use_user_assigned
-      token_acquire_url = (token_acquire_url + '&' + append_header('client_id', ERB::Util.url_encode(@managed_identity_client_id)))      
-    end
+      if @use_user_assigned
+        token_acquire_url = (token_acquire_url + '&' + append_header('client_id', ERB::Util.url_encode(@managed_identity_client_id)))      
+      end
+      @token_acquire_url = token_acquire_url
   end
 
   def fetch_token
@@ -58,7 +59,7 @@ class ManagedIdentityTokenProvider < AbstractTokenProvider
     headers = { 'Metadata' => 'true' }
     max_retries = 2
     retries = 0
-    uri = URI.parse(@imds_base_url)
+    uri = URI.parse(@token_acquire_url)
     while retries < max_retries
       begin
         http = Net::HTTP.new(uri.host, uri.port)

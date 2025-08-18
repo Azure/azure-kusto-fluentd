@@ -6,6 +6,7 @@ require 'fluent/plugin/output'
 require_relative 'ingester'
 require 'time'
 require_relative 'kusto_error_handler'
+require_relative 'kusto_query'
 require 'logger'
 require 'json'
 require 'stringio'
@@ -143,7 +144,7 @@ module Fluent
           formatted = format(tag, time, record).encode('UTF-8', invalid: :replace, undef: :replace, replace: '_')
           safe_tag = tag.to_s.encode('UTF-8', invalid: :replace, undef: :replace, replace: '_').gsub(/[^0-9A-Za-z.-]/, '_')
           blob_name = "fluentd_event_#{safe_tag}.json"
-          @ingester.upload_data_to_blob_and_queue(formatted, blob_name, database_name, table_name, compression_enabled)
+          @ingester.upload_data_to_blob_and_queue(formatted, blob_name, @database_name, @table_name, compression_enabled)
         rescue StandardError => e
           @logger&.error("Failed to ingest event to Kusto: #{e}\nEvent skipped: #{record.inspect}\n#{e.backtrace.join("\n")}")
           next
@@ -202,7 +203,7 @@ module Fluent
         row_count = records.size
         data_to_upload = compression_enabled ? compress_data(updated_raw_data) : updated_raw_data
         begin
-          @ingester.upload_data_to_blob_and_queue(data_to_upload, blob_name, database_name, table_name, compression_enabled)
+          @ingester.upload_data_to_blob_and_queue(data_to_upload, blob_name, @database_name, @table_name, compression_enabled)
           if @shutdown_called
             commit_write(chunk.unique_id)
             @logger.info("Immediate commit for chunk_id=#{chunk_id} due to shutdown") if @logger
@@ -234,8 +235,11 @@ module Fluent
       def check_data_on_server(chunk_id, row_count)
         # Query Kusto to verify chunk ingestion
         begin
-          query = "#{@table_name} | extend record_dynamic = parse_json(record) | where record_dynamic.chunk_id == '#{chunk_id}' | count"
-          result = run_kusto_api_query(query, @endpoint, @ingester.token_provider, use_ingest_endpoint: false, database_name: @database_name)
+          # Sanitize inputs to prevent injection attacks
+          safe_table_name = @table_name.to_s.gsub(/[^a-zA-Z0-9_]/, '')
+          safe_chunk_id = chunk_id.to_s.gsub(/[^a-zA-Z0-9_-]/, '')
+          query = "#{safe_table_name} | extend record_dynamic = parse_json(record) | where record_dynamic.chunk_id == '#{safe_chunk_id}' | count"
+          result = run_kusto_api_query(query, @outconfiguration.kusto_endpoint, @ingester.token_provider, use_ingest_endpoint: false, database_name: @database_name)
           if result.is_a?(Array) && result[0].is_a?(Array)
             count_val = result[0][0].to_i
             return count_val == row_count
