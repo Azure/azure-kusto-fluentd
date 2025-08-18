@@ -10,6 +10,7 @@ require 'uri'
 require 'json'
 require_relative '../../lib/fluent/plugin/kusto_query'
 require_relative '../../lib/fluent/plugin/ingester'
+require_relative '../../lib/fluent/plugin/conffile'
 require 'ostruct'
 
 class KustoE2ETest < Test::Unit::TestCase
