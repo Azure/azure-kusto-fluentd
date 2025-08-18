@@ -18,7 +18,7 @@ end
 # Runs a Kusto API query against the specified endpoint.
 # Handles both management and query endpoints, builds request, and parses response.
 def run_kusto_api_query(query, data_endpoint, token_provider, use_ingest_endpoint: false, database_name: nil)
-  access_token = token_provider.aad_token_bearer
+  access_token = token_provider.get_token
   endpoint = use_ingest_endpoint ? to_ingest_endpoint(data_endpoint) : data_endpoint
   path = use_ingest_endpoint ? '/v1/rest/mgmt' : '/v1/rest/query'
   uri = URI("#{endpoint}#{path}")

@@ -96,6 +96,7 @@ class Client
   def create_token_provider(outconfiguration)
     case outconfiguration.auth_type&.downcase
     when 'aad'
+      return AadTokenProvider.new(outconfiguration)
     when 'azcli'
       return AzCliTokenProvider.new(outconfiguration)
     when 'workload_identity'
