@@ -44,7 +44,7 @@ class KustoE2ETest < Test::Unit::TestCase
     outconfig = OutputConfiguration.new(opts)
     ingester = Ingester.new(outconfig)
     def ingester.access_token
-      @client.token_provider.fetch_token
+      @client.token_provider.get_token
     end
     ingester.access_token
   end
@@ -275,7 +275,7 @@ class KustoE2ETest < Test::Unit::TestCase
       events.each do |t, r|
         @driver.feed(tag, t, r)
       end
-      sleep 5 # Wait for buffer flush
+      sleep 10 # Wait for buffer flush
     end
     sleep 10 # Wait for ingestion
     query = "#{@table} | extend r = parse_json(record) | where r.id == 2 and r.name startswith \"write_test_\""
