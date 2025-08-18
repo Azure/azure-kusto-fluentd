@@ -42,8 +42,8 @@ class OutputConfiguration
     case @auth_type&.downcase
     when 'aad'
       validate_aad_config
-    when 'user_managed_identity', 'system_managed_identity'
-      validate_managed_identity_config
+    when 'user_managed_identity', 'system_managed_identity', 'azcli'
+      validate_base_config
     when 'workload_identity'
       validate_workload_identity_config
     else
@@ -89,7 +89,7 @@ class OutputConfiguration
     !val.empty?
   end
 
-  def validate_managed_identity_config
+  def validate_base_config
     # Validate required configs for Managed Identity
     required = {
       'kusto_endpoint' => @kusto_endpoint,
