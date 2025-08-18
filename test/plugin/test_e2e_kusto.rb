@@ -44,7 +44,7 @@ class KustoE2ETest < Test::Unit::TestCase
     outconfig = OutputConfiguration.new(opts)
     ingester = Ingester.new(outconfig)
     def ingester.access_token
-      @client.token_provider.aad_token_bearer
+      @client.token_provider.fetch_token
     end
     ingester.access_token
   end

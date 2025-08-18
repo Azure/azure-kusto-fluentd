@@ -159,7 +159,7 @@ class KustoOutputStartTest < Test::Unit::TestCase
     # Add client and token_provider mocks for shutdown
     client_mock = mock
     token_provider_mock = mock
-    token_provider_mock.stubs(:aad_token_bearer).returns('fake-access-token')
+    token_provider_mock.stubs(:fetch_token).returns('fake-access-token')
     client_mock.stubs(:token_provider).returns(token_provider_mock)
     ingester_mock.stubs(:client).returns(client_mock)
     ingester_mock.stubs(:token_provider).returns(token_provider_mock)
