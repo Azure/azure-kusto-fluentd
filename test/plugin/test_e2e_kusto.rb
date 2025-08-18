@@ -124,18 +124,16 @@ class KustoE2ETest < Test::Unit::TestCase
 
   def setup
     Fluent::Test.setup
-    @engine_url = ENV['ENDPOINT'] || 'https://example.kusto.windows.net'
-    @database = ENV['TEST_DATABASE_NAME'] || 'testdb'
-    @table = "RubyE2E#{Time.now.to_i}"
+    @engine_url = ENV['CLUSTER'] || 'https://example.kusto.windows.net'
+    @database = ENV['DB'] || 'testdb'
+    @table = "FluentD_#{Time.now.to_i}"
     @columns = "(tag:string, timestamp:datetime, record:string)"
     @client_id = ENV['CLIENT_ID'] || ''
     @client_secret = ENV['CLIENT_SECRET'] || ''
     @tenant_id = ENV['TENANT_ID'] || ''
     @managed_identity_client_id = ENV['MANAGED_IDENTITY_CLIENT_ID'] || ''
     @auth_type = (ENV['AUTH_TYPE'] || 'aad').downcase
-    @wi_client_id = ENV['WORKLOAD_IDENTITY_CLIENT_ID'] || ''
-    @wi_tenant_id = ENV['WORKLOAD_IDENTITY_TENANT_ID'] || @tenant_id
-    @wi_token_file = ENV['WORKLOAD_IDENTITY_TOKEN_FILE'] || ENV['AZURE_FEDERATED_TOKEN_FILE'] || ''
+
     @auth_lines = case @auth_type
     when 'azcli'
       <<-AUTH
@@ -175,10 +173,7 @@ class KustoE2ETest < Test::Unit::TestCase
     @driver.instance.instance_variable_set(:@logger, Logger.new($stdout))
     @driver.instance.start
     drop_resp = kusto_mgmt_query(".drop table #{@table} ifexists")
-    # puts "Drop table response: #{drop_resp.inspect}"
     create_resp = kusto_mgmt_query(".create table #{@table} #{@columns}")
-    # puts "Create table response: #{create_resp.inspect}"
-    # puts "Tables in DB: #{kusto_mgmt_query('.show tables').inspect}"
   end
 
   def teardown
@@ -188,8 +183,6 @@ class KustoE2ETest < Test::Unit::TestCase
   def create_test_table(table_name)
     kusto_mgmt_query(".drop table #{table_name} ifexists")
     create_resp = kusto_mgmt_query(".create table #{table_name} #{@columns}")
-    # puts "Create table response: #{create_resp.inspect}"
-    # puts "Tables in DB: #{kusto_mgmt_query('.show tables').inspect}"
   end
 
   # Before running this test, ensure your service principal has TableAdmin and Ingestor permissions on the test database.
@@ -199,7 +192,7 @@ class KustoE2ETest < Test::Unit::TestCase
   # Update your .env and test config to use Fluentd-test-db as the database.
 
   test 'process function ingestion to Kusto' do
-    @table = "RubyE2E_process_#{Time.now.to_i}"
+    @table = "FluentD_process_#{Time.now.to_i}"
     @conf = <<-CONF
       @type kusto
       @log_level debug
@@ -248,7 +241,7 @@ class KustoE2ETest < Test::Unit::TestCase
   end
 
   test 'write function ingests data to Kusto' do
-    @table = "RubyE2E_write_#{Time.now.to_i}"
+    @table = "FluentD_write_#{Time.now.to_i}"
     @conf = <<-CONF
       @type kusto
       @log_level debug
@@ -300,7 +293,7 @@ class KustoE2ETest < Test::Unit::TestCase
   end
 
   test 'try_write function ingests data to Kusto' do
-    @table = "RubyE2E_trywrite_#{Time.now.to_i}"
+    @table = "FluentD_trywrite_#{Time.now.to_i}"
     @conf = <<-CONF
       @type kusto
       @log_level debug
@@ -367,7 +360,7 @@ class KustoE2ETest < Test::Unit::TestCase
   end
 
   test 'try_write function ingests data to Kusto with parallel chunk commit' do
-    @table = "RubyE2E_trywrite_parallel_#{Time.now.to_i}"
+    @table = "FluentD_trywrite_parallel_#{Time.now.to_i}"
     @conf = <<-CONF
       @type kusto
       @log_level debug
