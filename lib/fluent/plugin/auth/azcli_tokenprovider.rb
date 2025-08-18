@@ -14,8 +14,6 @@ class AzCliTokenProvider < AbstractTokenProvider
 
   # Use get_token from base class for token retrieval
 
-  private
-
   def fetch_token
     token = acquire_token(@resource)
     raise "No valid Azure CLI token found for resource: #{@resource}" unless token
