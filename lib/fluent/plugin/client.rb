@@ -31,6 +31,7 @@ class Client
   def resources
     # Return cached resources if valid, otherwise fetch and cache
     return @cached_resources if resources_cached?
+
     fetch_and_cache_resources
     @cached_resources
   end
@@ -56,12 +57,13 @@ class Client
     @logger.info('Fetching resources from Kusto...')
     blob_rows, aad_token_rows = fetch_kusto_resources
     return unless blob_rows && aad_token_rows
+
     blob_sas_uri, queue_sas_uri, identity_token = extract_resource_uris(blob_rows, aad_token_rows)
     return unless validate_resource_uris(blob_sas_uri, queue_sas_uri, identity_token)
+
     assign_and_cache_resources(blob_sas_uri, queue_sas_uri, identity_token)
   end
 
-  
   def fetch_kusto_resources
     # Fetch resource rows and validate them
     blob_rows, aad_token_rows = fetch_kusto_rows_with_error_handling
@@ -96,9 +98,9 @@ class Client
   def create_token_provider(outconfiguration)
     case outconfiguration.auth_type&.downcase
     when 'aad'
-      return AadTokenProvider.new(outconfiguration)
+      AadTokenProvider.new(outconfiguration)
     when 'azcli'
-      return AzCliTokenProvider.new(outconfiguration)
+      AzCliTokenProvider.new(outconfiguration)
     when 'workload_identity'
       WorkloadIdentity.new(outconfiguration)
     when 'user_managed_identity', 'system_managed_identity'

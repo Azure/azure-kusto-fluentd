@@ -28,9 +28,8 @@ class AzCliTokenProvider < AbstractTokenProvider
     az_cli = locate_azure_cli
     cmd = "#{az_cli} account get-access-token --resource #{Shellwords.escape(resource)} --output json"
     stdout, stderr, status = Open3.capture3(cmd)
-    unless status.success?
-      raise "Failed to acquire Azure CLI token: #{stderr.strip}"
-    end
+    raise "Failed to acquire Azure CLI token: #{stderr.strip}" unless status.success?
+
     JSON.parse(stdout)
   rescue Errno::ENOENT
     raise "Azure CLI not found. Please install Azure CLI and run 'az login'."

@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require 'logger'
-require 'thread'
 
 # AbstractTokenProvider defines the interface and shared logic for all token providers.
 class AbstractTokenProvider

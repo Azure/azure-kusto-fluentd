@@ -29,21 +29,31 @@ class ManagedIdentityTokenProvider < AbstractTokenProvider
     @managed_identity_client_id = outconfiguration.managed_identity_client_id
     val = @managed_identity_client_id.to_s.strip
     @use_system_assigned = (val.upcase == 'SYSTEM')
-    @use_user_assigned = (!val.empty? && val.upcase != 'SYSTEM')
+    @use_user_assigned = !val.empty? && val.upcase != 'SYSTEM'
   end
 
   def append_header(name, value)
-      "#{name}=#{value}"
+    "#{name}=#{value}"
   end
 
   def token_request_params_set(_outconfiguration)
-      token_acquire_url = IMDS_TOKEN_ACQUIRE_URL.dup + "?" + append_header('resource', ERB::Util.url_encode(outconfiguration.kusto_endpoint)) + '&' + append_header('api-version', '2018-02-01')
-      token_acquire_url = (token_acquire_url + '&' + append_header('object_id', ERB::Util.url_encode(@object_id))) unless @object_id.nil?
-      token_acquire_url = (token_acquire_url + '&' + append_header('msi_res_id', ERB::Util.url_encode(@msi_res_id))) unless @msi_res_id.nil?
-      url = URI.parse(token_acquire_url)
-    if @use_user_assigned
-      token_acquire_url = (token_acquire_url + '&' + append_header('client_id', ERB::Util.url_encode(@managed_identity_client_id)))      
+    token_acquire_url = IMDS_TOKEN_ACQUIRE_URL.dup + '?' + append_header('resource',
+                                                                         ERB::Util.url_encode(outconfiguration.kusto_endpoint)) + '&' + append_header(
+                                                                           'api-version', '2018-02-01'
+                                                                         )
+    unless @object_id.nil?
+      token_acquire_url = (token_acquire_url + '&' + append_header('object_id',
+                                                                   ERB::Util.url_encode(@object_id)))
     end
+    unless @msi_res_id.nil?
+      token_acquire_url = (token_acquire_url + '&' + append_header('msi_res_id',
+                                                                   ERB::Util.url_encode(@msi_res_id)))
+    end
+    URI.parse(token_acquire_url)
+    return unless @use_user_assigned
+
+    (token_acquire_url + '&' + append_header('client_id',
+                                             ERB::Util.url_encode(@managed_identity_client_id)))
   end
 
   def fetch_token
