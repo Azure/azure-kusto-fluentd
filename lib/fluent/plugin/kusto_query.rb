@@ -9,7 +9,6 @@ require 'json'
 require 'securerandom'
 require 'base64'
 
-
 def to_ingest_endpoint(data_endpoint)
   # Convert a Kusto data endpoint to its corresponding ingest endpoint
   data_endpoint.sub(%r{^https://}, 'https://ingest-')

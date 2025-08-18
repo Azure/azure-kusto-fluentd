@@ -123,7 +123,8 @@ class Ingester
   def upload_data_to_blob_and_queue(raw_data, blob_name, db, table_name, compression_enabled = true)
     # Upload data to blob and send ingestion message to queue
     blob_uri, blob_size_bytes = upload_to_blob(@resources[:blob_sas_uri], raw_data, blob_name)
-    message = prepare_ingestion_message2(db, table_name, blob_uri, blob_size_bytes, @resources[:identity_token], compression_enabled)
+    message = prepare_ingestion_message2(db, table_name, blob_uri, blob_size_bytes, @resources[:identity_token],
+                                         compression_enabled)
     post_message_to_queue_http(@resources[:queue_sas_uri], message)
     { blob_uri: blob_uri, blob_size_bytes: blob_size_bytes }
   end

@@ -32,10 +32,14 @@ module Fluent
       config_param :azure_cloud, :string, default: 'AzureCloud'
       config_param :compression_enabled, :bool, default: true
       config_param :logger_path, :string, default: nil
-      config_param :auth_type, :string, default: 'aad', desc: 'Authentication type to use for Kusto. Options: "aad", "user_managed_identity", "system_managed_identity", "workload_identity".'
-      config_param :workload_identity_client_id, :string, default: nil, secret: true, desc: 'Client ID for workload identity authentication.'
-      config_param :workload_identity_tenant_id, :string, default: nil, secret: true, desc: 'Tenant ID for workload identity authentication.'
-      config_param :workload_identity_token_file_path, :string, default: nil, secret: true, desc: 'File path for workload identity token.'
+      config_param :auth_type, :string, default: 'aad',
+                                        desc: 'Authentication type to use for Kusto. Options: "aad", "user_managed_identity", "system_managed_identity", "workload_identity".'
+      config_param :workload_identity_client_id, :string, default: nil, secret: true,
+                                                          desc: 'Client ID for workload identity authentication.'
+      config_param :workload_identity_tenant_id, :string, default: nil, secret: true,
+                                                          desc: 'Tenant ID for workload identity authentication.'
+      config_param :workload_identity_token_file_path, :string, default: nil, secret: true,
+                                                                desc: 'File path for workload identity token.'
 
       config_section :buffer do
         config_set_default :chunk_keys, ['time']
@@ -85,6 +89,7 @@ module Fluent
         return record['host'] if record['host']
         return record['user'] if record['user']
         return ::Regexp.last_match(1) if record['message'] && record['message'] =~ /(\d{1,3}(?:\.\d{1,3}){3})/
+
         'default_tag'
       end
 
@@ -92,8 +97,10 @@ module Fluent
         # Extract datetime from record or fallback to time
         timestamp = find_time_or_date_key(record)
         return timestamp if timestamp && !timestamp.to_s.empty?
+
         timestamp = (time ? Time.at(time).utc.iso8601 : '')
         return timestamp unless timestamp.to_s.empty?
+
         timestamp = find_timestamp_by_regex(record)
         timestamp ||= ''
         timestamp
@@ -102,6 +109,7 @@ module Fluent
       def find_time_or_date_key(record)
         # Find time/date key in record
         return nil unless record.is_a?(Hash)
+
         record.each do |k, v|
           return v if k.to_s.downcase.include?('time') || k.to_s.downcase.include?('date')
         end
@@ -119,7 +127,13 @@ module Fluent
 
       def format_record_json(tag_val, timestamp, safe_record)
         # Format record as JSON for ingestion
-        record_value = safe_record.is_a?(Hash) ? safe_record.reject { |k, _| %w[tag time].include?(k) } : (safe_record || {})
+        record_value = if safe_record.is_a?(Hash)
+                         safe_record.reject do |k, _|
+                           %w[tag time].include?(k)
+                         end
+                       else
+                         safe_record || {}
+                       end
         { 'tag' => tag_val, 'timestamp' => timestamp, 'record' => record_value }.to_json
       end
 
@@ -127,6 +141,7 @@ module Fluent
         # Convert unique_id to hex string
         return 'noid' if unique_id.nil?
         return unique_id.unpack1('H*') if unique_id.respond_to?(:unpack1)
+
         unique_id.to_s
       end
 
@@ -142,7 +157,8 @@ module Fluent
       def process(tag, es)
         es.each do |time, record|
           formatted = format(tag, time, record).encode('UTF-8', invalid: :replace, undef: :replace, replace: '_')
-          safe_tag = tag.to_s.encode('UTF-8', invalid: :replace, undef: :replace, replace: '_').gsub(/[^0-9A-Za-z.-]/, '_')
+          safe_tag = tag.to_s.encode('UTF-8', invalid: :replace, undef: :replace, replace: '_').gsub(/[^0-9A-Za-z.-]/,
+                                                                                                     '_')
           blob_name = "fluentd_event_#{safe_tag}.json"
           @ingester.upload_data_to_blob_and_queue(formatted, blob_name, @database_name, @table_name, compression_enabled)
         rescue StandardError => e
@@ -156,13 +172,15 @@ module Fluent
         worker_id = Fluent::Engine.worker_id
         raw_data = chunk.read
         tag = extract_tag_from_metadata(chunk.metadata)
-        safe_tag = tag.to_s.encode('UTF-8', invalid: :replace, undef: :replace, replace: '_').gsub(/[^0-9A-Za-z.-]/, '_')
+        safe_tag = tag.to_s.encode('UTF-8', invalid: :replace, undef: :replace, replace: '_').gsub(/[^0-9A-Za-z.-]/,
+                                                                                                   '_')
         unique_id = chunk.unique_id
         ext = compression_enabled ? '.json.gz' : '.json'
         blob_name = "fluentd_event_worker#{worker_id}_#{safe_tag}_#{dump_unique_id_hex(unique_id)}#{ext}"
         data_to_upload = compression_enabled ? compress_data(raw_data) : raw_data
         begin
-          @ingester.upload_data_to_blob_and_queue(data_to_upload, blob_name, @database_name, @table_name, compression_enabled)
+          @ingester.upload_data_to_blob_and_queue(data_to_upload, blob_name, @database_name, @table_name,
+                                                  compression_enabled)
         rescue StandardError => e
           handle_kusto_error(e, unique_id)
         end
@@ -172,6 +190,7 @@ module Fluent
         # Extract tag from chunk metadata
         return 'default_tag' if metadata.nil?
         return metadata.tag || 'default_tag' if metadata.respond_to?(:tag)
+
         'default_tag'
       end
 
@@ -183,21 +202,18 @@ module Fluent
       def try_write(chunk)
         @deferred_threads ||= []
         tag = extract_tag_from_metadata(chunk.metadata)
-        safe_tag = tag.to_s.encode('UTF-8', invalid: :replace, undef: :replace, replace: '_').gsub(/[^0-9A-Za-z.-]/, '_')
+        safe_tag = tag.to_s.encode('UTF-8', invalid: :replace, undef: :replace, replace: '_').gsub(/[^0-9A-Za-z.-]/,
+                                                                                                   '_')
         chunk_id = dump_unique_id_hex(chunk.unique_id)
         ext = compression_enabled ? '.json.gz' : '.json'
         blob_name = "fluentd_event_#{safe_tag}_#{chunk_id}#{ext}"
-        raw_data = chunk.read || ""
+        raw_data = chunk.read || ''
         records = raw_data.split("\n").map do |line|
-          begin
-            rec = JSON.parse(line)
-            if rec.is_a?(Hash) && rec['record'].is_a?(Hash)
-              rec['record']['chunk_id'] = chunk_id
-            end
-            rec.to_json
-          rescue
-            line
-          end
+          rec = JSON.parse(line)
+          rec['record']['chunk_id'] = chunk_id if rec.is_a?(Hash) && rec['record'].is_a?(Hash)
+          rec.to_json
+        rescue StandardError
+          line
         end
         updated_raw_data = records.join("\n")
         row_count = records.size
@@ -206,7 +222,7 @@ module Fluent
           @ingester.upload_data_to_blob_and_queue(data_to_upload, blob_name, @database_name, @table_name, compression_enabled)
           if @shutdown_called
             commit_write(chunk.unique_id)
-            @logger.info("Immediate commit for chunk_id=#{chunk_id} due to shutdown") if @logger
+            @logger&.info("Immediate commit for chunk_id=#{chunk_id} due to shutdown")
           else
             thread = start_deferred_commit_thread(chunk_id, chunk, row_count)
             @deferred_threads << thread if thread
@@ -219,6 +235,7 @@ module Fluent
       def start_deferred_commit_thread(chunk_id, chunk, row_count)
         # Start a thread to commit chunk after verifying ingestion
         return nil if @shutdown_called
+
         Thread.new do
           loop do
             sleep 1
@@ -243,11 +260,13 @@ module Fluent
           if result.is_a?(Array) && result[0].is_a?(Array)
             count_val = result[0][0].to_i
             return count_val == row_count
-          else
-            @logger.error("Kusto query failed or returned unexpected result: #{result.inspect}") if @logger && @logger.respond_to?(:error)
+          elsif @logger.respond_to?(:error)
+            if @logger.respond_to?(:error)
+              @logger.error("Kusto query failed or returned unexpected result: #{result.inspect}")
+            end
           end
-        rescue => e
-          @logger.error("Failed to get chunk_id count: #{e}") if @logger && @logger.respond_to?(:error)
+        rescue StandardError => e
+          @logger.error("Failed to get chunk_id count: #{e}") if @logger.respond_to?(:error)
         end
         false
       end
@@ -255,15 +274,13 @@ module Fluent
       def shutdown
         # Handle plugin shutdown and cleanup threads
         @shutdown_called = true
-        if @deferred_threads
-          @deferred_threads.each do |t|
-            if t.alive?
-              t.kill
-              @logger.info("delayed commit for buffer chunks was cancelled in shutdown chunk_id=unknown") if @logger
-            end
+        @deferred_threads&.each do |t|
+          if t.alive?
+            t.kill
+            @logger&.info('delayed commit for buffer chunks was cancelled in shutdown chunk_id=unknown')
           end
         end
-        @ingester.shutdown if @ingester && @ingester.respond_to?(:shutdown)
+        @ingester.shutdown if @ingester.respond_to?(:shutdown)
         super
       end
 
@@ -272,13 +289,16 @@ module Fluent
       def validate_buffer_config(conf)
         # Validate buffer configuration
         return unless !@buffered && conf.elements('buffer').any?
+
         raise Fluent::ConfigError, 'Buffer section present but buffered is false'
       end
 
       def validate_delayed_config
         # Validate delayed commit configuration
         return unless !@buffered && @delayed
-        raise Fluent::ConfigError, 'Delayed commit is only supported in buffered mode (buffered must be true if delayed is true)'
+
+        raise Fluent::ConfigError,
+              'Delayed commit is only supported in buffered mode (buffered must be true if delayed is true)'
       end
 
       def validate_required_params
@@ -289,6 +309,7 @@ module Fluent
           value.nil? || value.strip.empty?
         end
         return if missing_params.empty?
+
         raise Fluent::ConfigError, "Missing required parameters: #{missing_params.join(', ')}"
       end
 
@@ -329,6 +350,7 @@ module Fluent
         # Recursively sanitize record for JSON serialization
         return obj unless obj.is_a?(Hash) || obj.is_a?(Array)
         raise 'Circular reference detected in record' if seen.include?(obj.object_id)
+
         seen.add(obj.object_id)
         obj.is_a?(Hash) ? sanitize_hash(obj, seen) : sanitize_array(obj, seen)
       end

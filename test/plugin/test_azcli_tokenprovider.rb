@@ -24,14 +24,14 @@ class AzCliTokenProviderIntegrationTest < Test::Unit::TestCase
 
   def test_get_token_integration
     begin
-      az_path = @provider.send(:locate_azure_cli)
+      @provider.send(:locate_azure_cli)
     rescue RuntimeError
-      omit("Azure CLI not installed, skipping integration test.")
+      omit('Azure CLI not installed, skipping integration test.')
     end
 
     token = @provider.get_token
-    assert_not_nil(token, "Token should not be nil")
+    assert_not_nil(token, 'Token should not be nil')
     assert_kind_of(String, token)
-    assert(token.length > 0, "Token should not be empty")
+    assert(token.length.positive?, 'Token should not be empty')
   end
 end

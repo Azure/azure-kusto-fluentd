@@ -34,7 +34,7 @@ class OutputConfiguration
     @workload_identity_client_id = opts[:workload_identity_client_id]
     @workload_identity_tenant_id = opts[:workload_identity_tenant_id]
     @workload_identity_token_file_path = opts[:workload_identity_token_file_path]
-    validate_configuration()
+    validate_configuration
   end
 
   def validate_configuration
@@ -75,11 +75,11 @@ class OutputConfiguration
 
   def initialize_logger
     # Use logger_path if provided, otherwise log to stdout
-    if @logger_path && !@logger_path.strip.empty?
-      logger = Logger.new(@logger_path, 'daily')
-    else
-      logger = Logger.new($stdout)
-    end
+    logger = if @logger_path && !@logger_path.strip.empty?
+               Logger.new(@logger_path, 'daily')
+             else
+               Logger.new($stdout)
+             end
     logger.level = Logger::DEBUG
     logger
   end

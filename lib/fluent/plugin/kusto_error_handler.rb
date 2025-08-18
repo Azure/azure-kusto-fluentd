@@ -60,6 +60,7 @@ class KustoErrorHandler
       # Always raise the custom error if present
       raise kusto_error if kusto_error.is_a?(StandardError)
       raise kusto_error unless kusto_error.is_permanent?
+
       nil
     else
       log_failed_ingest(logger, unique_id, e)
@@ -80,6 +81,7 @@ class KustoErrorHandler
       # Always raise the custom error if present
       raise kusto_error if kusto_error.is_a?(StandardError)
       raise kusto_error unless kusto_error.is_permanent?
+
       nil
     else
       logger.error(

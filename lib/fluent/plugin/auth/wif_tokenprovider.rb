@@ -7,11 +7,7 @@ require_relative 'tokenprovider_base'
 
 class WorkloadIdentity < AbstractTokenProvider
   DEFAULT_TOKEN_FILE = '/var/run/secrets/azure/tokens/azure-identity-token'
-  AZURE_OAUTH2_TOKEN_ENDPOINT = 'https://login.microsoftonline.com/%{tenant_id}/oauth2/v2.0/token'
-
-  def initialize(outconfiguration)
-    super(outconfiguration)
-  end
+  AZURE_OAUTH2_TOKEN_ENDPOINT = 'https://login.microsoftonline.com/%<tenant_id>s/oauth2/v2.0/token'
 
   # Use get_token from base class for token retrieval
 
@@ -35,7 +31,7 @@ class WorkloadIdentity < AbstractTokenProvider
 
   def acquire_workload_identity_token
     oidc_token = File.read(@token_file).strip
-    uri = URI.parse(AZURE_OAUTH2_TOKEN_ENDPOINT % { tenant_id: @tenant_id })
+    uri = URI.parse(format(AZURE_OAUTH2_TOKEN_ENDPOINT, tenant_id: @tenant_id))
     req = Net::HTTP::Post.new(uri)
     req.set_form_data(
       'grant_type' => 'client_credentials',
@@ -48,6 +44,7 @@ class WorkloadIdentity < AbstractTokenProvider
     http.use_ssl = true
     res = http.request(req)
     raise "Failed to get access token: #{res.code} #{res.body}" unless res.is_a?(Net::HTTPSuccess)
+
     JSON.parse(res.body)
   end
 end

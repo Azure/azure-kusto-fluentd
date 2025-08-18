@@ -32,7 +32,7 @@ class AzCliTokenProvider < AbstractTokenProvider
     cmd = [escaped_az_cli, 'account', 'get-access-token', '--resource', escaped_resource, '--output', 'json']
     stdout, stderr, status = Open3.capture3(*cmd)
     unless status.success?
-      raise "Failed to acquire Azure CLI token: #{stderr.strip}"
+      raise "Failed to acquire Azure CLI token: #{stderr.strip}" unless status.success?
     end
     JSON.parse(stdout)
   rescue Errno::ENOENT
