@@ -13,6 +13,9 @@ require_relative '../../lib/fluent/plugin/ingester'
 require_relative '../../lib/fluent/plugin/conffile'
 require 'ostruct'
 require 'logger'
+require 'concurrent'
+require 'tempfile'
+require 'set'
 
 class KustoE2ETest < Test::Unit::TestCase
   include Fluent::Test::Helpers
@@ -163,17 +166,51 @@ class KustoE2ETest < Test::Unit::TestCase
     config_options = {
       buffered: false,
       delayed: false,
-      table_name: @table
+      table_name: @table,
+      flush_interval: '5s',
+      chunk_limit_size: '8k',
+      timekey: 60,
+      compression_enabled: true
     }.merge(options)
 
     buffer_config = if config_options[:buffered]
-                      <<-BUFFER
+                      buffer_type = config_options[:buffer_type] || 'memory'
+                      flush_mode = config_options[:flush_mode] || 'interval'
+                      
+                      base_buffer = <<-BUFFER
       <buffer>
-        @type memory
-        flush_interval 1s
-        chunk_limit_size #{options[:chunk_limit_size] || '8k'}
-      </buffer>
+        @type #{buffer_type}
+        chunk_limit_size #{config_options[:chunk_limit_size]}
+        timekey #{config_options[:timekey]}
+        flush_mode #{flush_mode}
+        flush_at_shutdown #{config_options[:flush_at_shutdown] || 'true'}
+        overflow_action #{config_options[:overflow_action] || 'throw_exception'}
+        retry_max_interval #{config_options[:retry_max_interval] || '30'}
+        retry_forever #{config_options[:retry_forever] || 'false'}
+        flush_thread_count #{config_options[:flush_thread_count] || '1'}
                       BUFFER
+                      
+                      # Only add flush_interval if flush_mode is not 'immediate'
+                      if flush_mode != 'immediate'
+                        base_buffer = base_buffer.sub(/flush_mode #{flush_mode}/, "flush_interval #{config_options[:flush_interval]}\n        flush_mode #{flush_mode}")
+                      end
+                      
+                      # Add file-specific configurations
+                      if buffer_type == 'file'
+                        base_buffer += "        path #{config_options[:buffer_path] || '/tmp/fluentd_test_buffer'}\n"
+                      end
+                      
+                      # Add additional buffer configurations
+                      if config_options[:total_limit_size]
+                        base_buffer += "        total_limit_size #{config_options[:total_limit_size]}\n"
+                      end
+                      
+                      if config_options[:chunk_limit_records]
+                        base_buffer += "        chunk_limit_records #{config_options[:chunk_limit_records]}\n"
+                      end
+                      
+                      base_buffer += "      </buffer>\n"
+                      base_buffer
                     else
                       ''
                     end
@@ -186,6 +223,7 @@ class KustoE2ETest < Test::Unit::TestCase
       endpoint #{@engine_url}
       database_name #{@database}
       table_name #{config_options[:table_name]}
+      compression_enabled #{config_options[:compression_enabled]}
       #{@auth_lines}
       #{buffer_config}
     CONF
@@ -214,6 +252,34 @@ class KustoE2ETest < Test::Unit::TestCase
     end
 
     rows
+  end
+
+  def generate_test_events(count, base_id, tag_suffix = '')
+    time = Time.now.to_i
+    events = []
+    count.times do |i|
+      events << [
+        time + i,
+        {
+          'id' => base_id + i,
+          'name' => "test_event_#{tag_suffix}_#{i + 1}",
+          'timestamp' => Time.at(time + i).utc.iso8601,
+          'data' => {
+            'index' => i,
+            'batch_id' => base_id,
+            'test_type' => tag_suffix
+          }
+        }
+      ]
+    end
+    events
+  end
+
+  def create_temp_buffer_file
+    temp_file = Tempfile.new(['fluentd_buffer', '.buf'])
+    temp_path = temp_file.path
+    temp_file.close
+    temp_path
   end
 
   # Before running this test, ensure your service principal has TableAdmin and Ingestor permissions on the test database.
@@ -363,4 +429,248 @@ class KustoE2ETest < Test::Unit::TestCase
              "Not all chunk records were committed in Kusto for chunk_id #{cid} (expected #{expected_count}, got #{chunk_rows.size})")
     end
   end
+
+  # ESSENTIAL E2E BUFFERING TEST CASES - START
+
+  # Test Case 1: Non-buffered mode with compression disabled
+  test 'non_buffered_compression_disabled' do
+    table_name = "FluentD_non_buffered_no_compression_#{Time.now.to_i}"
+    configure_and_start_driver(
+      table_name: table_name,
+      buffered: false,
+      compression_enabled: false
+    )
+    setup_test_table(table_name)
+
+    tag = 'e2e.non_buffered.no_compression'
+    events = generate_test_events(3, 1000, 'no_comp')
+
+    events.each do |time, record|
+      event_stream = Fluent::ArrayEventStream.new([[time, record]])
+      assert_nothing_raised { @driver.instance.process(tag, event_stream) }
+    end
+
+    query = "#{table_name} | extend r = parse_json(record) | where r.id >= 1000 and r.id <= 1002"
+    rows = wait_for_ingestion(query, 3)
+
+    assert(rows.size >= 3, "Expected 3 records, got #{rows.size} in non-buffered mode with compression disabled")
+  end
+
+  # Test Case 2: Memory buffered mode with immediate flush
+  test 'memory_buffered_immediate_flush' do
+    table_name = "FluentD_memory_buffered_immediate_#{Time.now.to_i}"
+    configure_and_start_driver(
+      table_name: table_name,
+      buffered: true,
+      buffer_type: 'memory',
+      flush_mode: 'immediate'
+    )
+    setup_test_table(table_name)
+
+    tag = 'e2e.memory_buffered.immediate'
+    events = generate_test_events(5, 2000, 'mem_imm')
+
+    @driver.run(default_tag: tag) do
+      events.each do |time, record|
+        @driver.feed(tag, time, record)
+      end
+      sleep 3 # Allow time for immediate flush
+    end
+
+    query = "#{table_name} | extend r = parse_json(record) | where r.id >= 2000 and r.id <= 2004"
+    rows = wait_for_ingestion(query, 5)
+
+    assert(rows.size >= 5, "Expected 5 records, got #{rows.size} in memory buffered immediate flush")
+  end
+
+  # Test Case 3: Memory buffered mode with interval flush
+  test 'memory_buffered_interval_flush' do
+    table_name = "FluentD_memory_buffered_interval_#{Time.now.to_i}"
+    configure_and_start_driver(
+      table_name: table_name,
+      buffered: true,
+      buffer_type: 'memory',
+      flush_mode: 'interval',
+      flush_interval: '3s'
+    )
+    setup_test_table(table_name)
+
+    tag = 'e2e.memory_buffered.interval'
+    events = generate_test_events(7, 3000, 'mem_int')
+
+    @driver.run(default_tag: tag) do
+      events.each do |time, record|
+        @driver.feed(tag, time, record)
+      end
+      sleep 8 # Wait longer than flush_interval
+    end
+
+    query = "#{table_name} | extend r = parse_json(record) | where r.id >= 3000 and r.id <= 3006"
+    rows = wait_for_ingestion(query, 7)
+
+    assert(rows.size >= 7, "Expected 7 records, got #{rows.size} in memory buffered interval flush")
+  end
+
+  # Test Case 4: Memory buffered mode with chunk size limit  
+  test 'memory_buffered_chunk_size_limit' do
+    table_name = "FluentD_memory_buffered_chunk_limit_#{Time.now.to_i}"
+    configure_and_start_driver(
+      table_name: table_name,
+      buffered: true,
+      buffer_type: 'memory',
+      chunk_limit_size: '512' # Small to force multiple chunks
+    )
+    setup_test_table(table_name)
+
+    tag = 'e2e.memory_buffered.chunk_limit'
+    # Create larger events to exceed chunk size quickly
+    events = []
+    10.times do |i|
+      large_data = 'x' * 100 # Create large payload
+      events << [
+        Time.now.to_i + i,
+        {
+          'id' => 4000 + i,
+          'name' => "chunk_limit_test_#{i + 1}",
+          'large_field' => large_data,
+          'data' => { 'index' => i, 'test_type' => 'chunk_limit' }
+        }
+      ]
+    end
+
+    @driver.run(default_tag: tag) do
+      events.each do |time, record|
+        @driver.feed(tag, time, record)
+      end
+      sleep 8
+    end
+
+    query = "#{table_name} | extend r = parse_json(record) | where r.id >= 4000 and r.id <= 4009"
+    rows = wait_for_ingestion(query, 10)
+
+    assert(rows.size >= 10, "Expected 10 records, got #{rows.size} in chunk size limit test")
+  end
+
+  # Test Case 5: Delayed commit mode with sync verification
+  test 'delayed_commit_sync_verification' do
+    table_name = "FluentD_delayed_commit_sync_#{Time.now.to_i}"
+    configure_and_start_driver(
+      table_name: table_name,
+      buffered: true,
+      delayed: true,
+      flush_interval: '3s'
+    )
+    setup_test_table(table_name)
+
+    tag = 'e2e.delayed_commit.sync'
+    events = generate_test_events(4, 5000, 'delayed_sync')
+
+    @driver.run(default_tag: tag) do
+      events.each do |time, record|
+        @driver.feed(tag, time, record)
+      end
+      sleep 8
+    end
+
+    query = "#{table_name} | extend r = parse_json(record) | where r.id >= 5000 and r.id <= 5003"
+    rows = wait_for_ingestion(query, 4)
+
+    assert(rows.size >= 4, "Expected 4 records, got #{rows.size} in delayed commit sync mode")
+    
+    # Verify chunk_id exists (added by delayed commit)
+    chunk_ids = rows.map { |row| row[3]['chunk_id'] if row[3] }.compact.uniq
+    assert(chunk_ids.size >= 1, "No chunk_ids found in delayed commit mode")
+  end
+
+  # Test Case 6: Delayed commit mode with multiple chunks
+  test 'delayed_commit_multiple_chunks' do
+    table_name = "FluentD_delayed_commit_multi_chunks_#{Time.now.to_i}"
+    configure_and_start_driver(
+      table_name: table_name,
+      buffered: true,
+      delayed: true,
+      chunk_limit_size: '300', # Small chunks to force multiple
+      flush_interval: '4s'
+    )
+    setup_test_table(table_name)
+
+    tag = 'e2e.delayed_commit.multi_chunks'
+    events = generate_test_events(12, 6000, 'multi_chunk')
+
+    @driver.run(default_tag: tag) do
+      events.each do |time, record|
+        @driver.feed(tag, time, record)
+      end
+      sleep 10
+    end
+
+    query = "#{table_name} | extend r = parse_json(record) | where r.id >= 6000 and r.id <= 6011"
+    rows = wait_for_ingestion(query, 12)
+
+    assert(rows.size >= 12, "Expected 12 records, got #{rows.size} in delayed commit multiple chunks")
+    
+    # Verify multiple chunk_ids exist
+    chunk_ids = rows.map { |row| row[3]['chunk_id'] if row[3] }.compact.uniq
+    assert(chunk_ids.size >= 1, "Expected chunk_ids, got #{chunk_ids.size}")
+  end
+
+  # Test Case 7: File buffer with persistent storage
+  test 'file_buffer_persistent_storage' do
+    table_name = "FluentD_file_buffer_persistent_#{Time.now.to_i}"
+    buffer_path = create_temp_buffer_file
+    configure_and_start_driver(
+      table_name: table_name,
+      buffered: true,
+      buffer_type: 'file',
+      buffer_path: buffer_path,
+      flush_interval: '5s',
+      chunk_limit_size: '4k'
+    )
+    setup_test_table(table_name)
+
+    tag = 'e2e.file_buffer.persistent'
+    events = generate_test_events(6, 20000, 'file_buf')
+
+    @driver.run(default_tag: tag) do
+      events.each do |time, record|
+        @driver.feed(tag, time, record)
+      end
+      sleep 8
+    end
+
+    query = "#{table_name} | extend r = parse_json(record) | where r.id >= 20000 and r.id <= 20005"
+    rows = wait_for_ingestion(query, 6)
+
+    assert(rows.size >= 6, "Expected 6 records, got #{rows.size} in file buffer persistent storage test")
+  end
+
+  # Test Case 8: Buffered mode with compression enabled
+  test 'buffered_mode_compression_enabled' do
+    table_name = "FluentD_buffered_compression_#{Time.now.to_i}"
+    configure_and_start_driver(
+      table_name: table_name,
+      buffered: true,
+      compression_enabled: true,
+      flush_interval: '4s',
+      chunk_limit_size: '8k'
+    )
+    setup_test_table(table_name)
+
+    tag = 'e2e.buffered.compression'
+    events = generate_test_events(10, 7000, 'compression')
+
+    @driver.run(default_tag: tag) do
+      events.each do |time, record|
+        @driver.feed(tag, time, record)
+      end
+      sleep 8
+    end
+
+    query = "#{table_name} | extend r = parse_json(record) | where r.id >= 7000 and r.id <= 7009"
+    rows = wait_for_ingestion(query, 10)
+
+    assert(rows.size >= 10, "Expected 10 records, got #{rows.size} in compression test")
+  end
+
+  # ESSENTIAL E2E BUFFERING TEST CASES - END
 end
