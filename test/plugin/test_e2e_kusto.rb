@@ -216,6 +216,9 @@ class KustoE2ETest < Test::Unit::TestCase
                       ''
                     end
 
+    # Add deferred_commit_timeout if specified
+    timeout_config = config_options[:deferred_commit_timeout] ? "deferred_commit_timeout #{config_options[:deferred_commit_timeout]}" : ''
+
     @conf = <<-CONF
       @type kusto
       @log_level debug
@@ -225,6 +228,7 @@ class KustoE2ETest < Test::Unit::TestCase
       database_name #{@database}
       table_name #{config_options[:table_name]}
       compression_enabled #{config_options[:compression_enabled]}
+      #{timeout_config}
       #{@auth_lines}
       #{buffer_config}
     CONF
@@ -559,7 +563,8 @@ class KustoE2ETest < Test::Unit::TestCase
       table_name: table_name,
       buffered: true,
       delayed: true,
-      flush_interval: '3s'
+      flush_interval: '3s',
+      deferred_commit_timeout: 15
     )
     setup_test_table(table_name)
 
@@ -591,7 +596,8 @@ class KustoE2ETest < Test::Unit::TestCase
       buffered: true,
       delayed: true,
       chunk_limit_size: '300', # Small chunks to force multiple
-      flush_interval: '4s'
+      flush_interval: '4s',
+      deferred_commit_timeout: 15
     )
     setup_test_table(table_name)
 

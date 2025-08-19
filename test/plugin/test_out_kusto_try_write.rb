@@ -48,6 +48,16 @@ class KustoOutputTryWriteTest < Test::Unit::TestCase
     @driver.instance.stubs(:commit_write)
   end
 
+  teardown do
+    # Clean up any running threads and reset mocks
+    if @driver&.instance&.instance_variable_get(:@deferred_threads)
+      threads = @driver.instance.instance_variable_get(:@deferred_threads)
+      threads.each { |t| t.kill if t.alive? }
+      threads.clear
+    end
+    Mocha::Mockery.instance.teardown
+  end
+
   def logger_stub
     m = mock
     m.stubs(:debug)
@@ -347,32 +357,26 @@ class KustoOutputTryWriteTest < Test::Unit::TestCase
       delayed false
       auth_type aad
     CONF
+    
+    # Set up minimal instance variables without calling start
+    driver2.instance.instance_variable_set(:@deferred_threads, [])
+    driver2.instance.instance_variable_set(:@shutdown_called, false)
+    driver2.instance.instance_variable_set(:@table_name, 'testtable')
+    driver2.instance.instance_variable_set(:@database_name, 'testdb')
+    
     ingester_mock = mock
     ingester_mock.expects(:upload_data_to_blob_and_queue).once
     logger_mock = mock
     logger_mock.stubs(:debug)
     logger_mock.stubs(:error)
+    logger_mock.stubs(:info)
     driver2.instance.instance_variable_set(:@ingester, ingester_mock)
     driver2.instance.instance_variable_set(:@logger, logger_mock)
-    driver2.instance.stubs(:check_data_on_server).returns(true)
     chunk = mock
     chunk.stubs(:read).returns('testdata')
     chunk.stubs(:metadata).returns(OpenStruct.new(tag: 'test.tag'))
     chunk.stubs(:unique_id).returns('uniqueid'.b)
     driver2.instance.expects(:commit_write).with(chunk.unique_id).once
-    # Patch Thread.new to run inline for this test to avoid background thread issues
-    orig_thread_new = Thread.method(:new)
-    Thread.singleton_class.class_eval do
-      define_method(:new) do |*_args, &block|
-        block.call
-      end
-    end
-    begin
-      assert_nothing_raised { driver2.instance.try_write(chunk) }
-    ensure
-      Thread.singleton_class.class_eval do
-        define_method(:new, orig_thread_new)
-      end
-    end
+    assert_nothing_raised { driver2.instance.try_write(chunk) }
   end
 end

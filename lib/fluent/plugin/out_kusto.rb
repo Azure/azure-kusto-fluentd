@@ -41,6 +41,8 @@ module Fluent
                                                           desc: 'Tenant ID for workload identity authentication.'
       config_param :workload_identity_token_file_path, :string, default: nil, secret: true,
                                                                 desc: 'File path for workload identity token.'
+      config_param :deferred_commit_timeout, :integer, default: 30,
+                                                        desc: 'Maximum time in seconds to wait for deferred commit verification before force committing.'
 
       config_section :buffer do
         config_set_default :chunk_keys, ['time']
@@ -223,9 +225,13 @@ module Fluent
         begin
           @ingester.upload_data_to_blob_and_queue(data_to_upload, blob_name, @database_name, @table_name,
                                                   compression_enabled)
-          if @shutdown_called
+          if @shutdown_called || !@delayed
             commit_write(chunk.unique_id)
-            @logger&.info("Immediate commit for chunk_id=#{chunk_id} due to shutdown")
+            if @shutdown_called
+              @logger&.info("Immediate commit for chunk_id=#{chunk_id} due to shutdown")
+            else
+              @logger&.info("Immediate commit for chunk_id=#{chunk_id} (delayed=false)")
+            end
           else
             thread = start_deferred_commit_thread(chunk_id, chunk, row_count)
             @deferred_threads << thread if thread
@@ -240,15 +246,40 @@ module Fluent
         return nil if @shutdown_called
 
         Thread.new do
+          max_wait_time = @deferred_commit_timeout # Maximum wait time in seconds
+          check_interval = 1 # Check every 1 second
+          attempts = 0
+          max_attempts = max_wait_time / check_interval
+
           loop do
-            sleep 1
+            break if @shutdown_called
+            
+            attempts += 1
+            
             if check_data_on_server(chunk_id, row_count)
               commit_write(chunk.unique_id)
+              @logger&.info("Successfully committed chunk_id=#{chunk_id} after #{attempts} attempts")
               break
             end
+
+            # If we've exceeded max attempts, commit anyway to avoid hanging
+            if attempts >= max_attempts
+              commit_write(chunk.unique_id)
+              @logger&.warn("Force committing chunk_id=#{chunk_id} after #{max_wait_time}s timeout (#{attempts} verification attempts)")
+              break
+            end
+
+            sleep check_interval
           end
         rescue StandardError => e
-          @logger.error("Error in deferred commit thread: #{e}")
+          @logger&.error("Error in deferred commit thread for chunk_id=#{chunk_id}: #{e}")
+          # Ensure chunk is committed even on error to avoid hanging
+          begin
+            commit_write(chunk.unique_id)
+            @logger&.warn("Force committed chunk_id=#{chunk_id} due to error in verification thread")
+          rescue StandardError => commit_error
+            @logger&.error("Failed to commit chunk_id=#{chunk_id} after thread error: #{commit_error}")
+          end
         end
       end
 
@@ -278,12 +309,31 @@ module Fluent
       def shutdown
         # Handle plugin shutdown and cleanup threads
         @shutdown_called = true
-        @deferred_threads&.each do |t|
-          if t.alive?
-            t.kill
-            @logger&.info('delayed commit for buffer chunks was cancelled in shutdown chunk_id=unknown')
+        
+        # Give deferred threads a chance to finish gracefully
+        if @deferred_threads&.any?
+          @logger&.info("Shutting down with #{@deferred_threads.size} active deferred commit threads")
+          
+          # Wait up to 10 seconds for threads to complete naturally
+          deadline = Time.now + 10
+          
+          while Time.now < deadline && @deferred_threads.any?(&:alive?)
+            alive_count = @deferred_threads.count(&:alive?)
+            @logger&.debug("Waiting for #{alive_count} deferred threads to complete...")
+            sleep 0.5
           end
+          
+          # Force kill any remaining threads
+          @deferred_threads.each do |t|
+            if t.alive?
+              t.kill
+              @logger&.info('delayed commit for buffer chunks was cancelled in shutdown chunk_id=unknown')
+            end
+          end
+          
+          @deferred_threads.clear
         end
+        
         @ingester.shutdown if @ingester.respond_to?(:shutdown)
         super
       end
