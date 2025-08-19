@@ -176,7 +176,7 @@ class KustoE2ETest < Test::Unit::TestCase
     buffer_config = if config_options[:buffered]
                       buffer_type = config_options[:buffer_type] || 'memory'
                       flush_mode = config_options[:flush_mode] || 'interval'
-                      
+
                       base_buffer = <<-BUFFER
       <buffer>
         @type #{buffer_type}
@@ -189,26 +189,27 @@ class KustoE2ETest < Test::Unit::TestCase
         retry_forever #{config_options[:retry_forever] || 'false'}
         flush_thread_count #{config_options[:flush_thread_count] || '1'}
                       BUFFER
-                      
+
                       # Only add flush_interval if flush_mode is not 'immediate'
                       if flush_mode != 'immediate'
-                        base_buffer = base_buffer.sub(/flush_mode #{flush_mode}/, "flush_interval #{config_options[:flush_interval]}\n        flush_mode #{flush_mode}")
+                        base_buffer = base_buffer.sub(/flush_mode #{flush_mode}/,
+                                                      "flush_interval #{config_options[:flush_interval]}\n        flush_mode #{flush_mode}")
                       end
-                      
+
                       # Add file-specific configurations
                       if buffer_type == 'file'
                         base_buffer += "        path #{config_options[:buffer_path] || '/tmp/fluentd_test_buffer'}\n"
                       end
-                      
+
                       # Add additional buffer configurations
                       if config_options[:total_limit_size]
                         base_buffer += "        total_limit_size #{config_options[:total_limit_size]}\n"
                       end
-                      
+
                       if config_options[:chunk_limit_records]
                         base_buffer += "        chunk_limit_records #{config_options[:chunk_limit_records]}\n"
                       end
-                      
+
                       base_buffer += "      </buffer>\n"
                       base_buffer
                     else
@@ -511,7 +512,7 @@ class KustoE2ETest < Test::Unit::TestCase
     assert(rows.size >= 7, "Expected 7 records, got #{rows.size} in memory buffered interval flush")
   end
 
-  # Test Case 4: Memory buffered mode with chunk size limit  
+  # Test Case 4: Memory buffered mode with chunk size limit
   test 'memory_buffered_chunk_size_limit' do
     table_name = "FluentD_memory_buffered_chunk_limit_#{Time.now.to_i}"
     configure_and_start_driver(
@@ -576,10 +577,10 @@ class KustoE2ETest < Test::Unit::TestCase
     rows = wait_for_ingestion(query, 4)
 
     assert(rows.size >= 4, "Expected 4 records, got #{rows.size} in delayed commit sync mode")
-    
+
     # Verify chunk_id exists (added by delayed commit)
     chunk_ids = rows.map { |row| row[3]['chunk_id'] if row[3] }.compact.uniq
-    assert(chunk_ids.size >= 1, "No chunk_ids found in delayed commit mode")
+    assert(chunk_ids.size >= 1, 'No chunk_ids found in delayed commit mode')
   end
 
   # Test Case 6: Delayed commit mode with multiple chunks
@@ -608,7 +609,7 @@ class KustoE2ETest < Test::Unit::TestCase
     rows = wait_for_ingestion(query, 12)
 
     assert(rows.size >= 12, "Expected 12 records, got #{rows.size} in delayed commit multiple chunks")
-    
+
     # Verify multiple chunk_ids exist
     chunk_ids = rows.map { |row| row[3]['chunk_id'] if row[3] }.compact.uniq
     assert(chunk_ids.size >= 1, "Expected chunk_ids, got #{chunk_ids.size}")
@@ -629,7 +630,7 @@ class KustoE2ETest < Test::Unit::TestCase
     setup_test_table(table_name)
 
     tag = 'e2e.file_buffer.persistent'
-    events = generate_test_events(6, 20000, 'file_buf')
+    events = generate_test_events(6, 20_000, 'file_buf')
 
     @driver.run(default_tag: tag) do
       events.each do |time, record|
