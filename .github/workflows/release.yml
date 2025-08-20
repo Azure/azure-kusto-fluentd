@@ -25,7 +25,7 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Build gem
-        run: gem build azure-kusto-fluentd.gemspec
+        run: gem build fluent-plugin-kusto.gemspec
         working-directory: .
 
       - name: Publish gem to RubyGems
@@ -37,6 +37,6 @@ jobs:
       - name: Set artifact name
         id: set_artifact_name
         run: |
-          ARTIFACT_PATH=$(find . -maxdepth 1 -iname 'azure-kusto-fluentd-*.gem')
+          ARTIFACT_PATH=$(find . -maxdepth 1 -iname 'fluent-plugin-kusto-*.gem')
           echo "artifact_name=$ARTIFACT_PATH" >> $GITHUB_OUTPUT
         working-directory: .
