@@ -116,76 +116,243 @@ A table with the expected schema must exist in order for data to be ingested pro
 .create table <table_name> (tag:string, timestamp:datetime, record:dynamic)
 ```
 
-## Configuration parameters
+## Authentication Methods
 
-| Key                                    | Description                                                                                                                                                                                                                                                             | Default                        |
-| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
-| `tenant_id`                            | The tenant/domain ID of the Azure Active Directory (AAD) registered application. Required if `managed_identity_client_id` isn't set.                                                                                                                                    | _none_                         |
-| `client_id`                            | The client ID of the AAD registered application. Required if `managed_identity_client_id` isn't set.                                                                                                                                                                    | _none_                         |
-| `client_secret`                        | The client secret of the AAD registered application ([App Secret](https://docs.microsoft.com/en-us/azure/active-directory/develop/howto-create-service-principal-portal#option-2-create-a-new-application-secret)). Required if `managed_identity_client_id` isn't set. | _none_                         |
-| `managed_identity_client_id`           | The managed identity ID to authenticate with. Set to `SYSTEM` for system-assigned managed identity, or set to the MI client ID (`GUID`) for user-assigned managed identity. Required if `tenant_id`, `client_id`, and `client_secret` aren't set.                       | _none_                         |
-| `endpoint`                   | The cluster's endpoint, usually in the form `https://cluster_name.region.kusto.windows.net`                                                                                                                                                            | _none_                         |
-| `database_name`                        | The database name.                                                                                                                                                                                                                                                      | _none_                         |
-| `table_name`                           | The table name.                                                                                                                                                                                                                                                         | _none_                         |
-| `compression_enabled`                  | If enabled, sends compressed HTTP payload (gzip) to Kusto.                                                                                                                                                                                                              | `true`                         |
-| `workers`                              | The number of [workers](../../../administration/multithreading#outputs) to perform flush operations for this output.                                                                                                                                                    | `0`                            |
-| `buffered`                    | Enable buffering into disk before ingesting into Azure Kusto. If `buffered` is `true`, buffered mode is activated. If `false`, non-buffered mode is used.                                                                                                               | `true`                        |
-| `delayed`                              | If `true`, enables delayed commit for buffer chunks. Only supported in buffered mode (`buffered` must be `true`). If `buffered` is `false`, delayed commit is not available.                                                     | `false`                        |
-| `azure_cloud`                          | Azure cloud environment. E.g., `AzureCloud`, `AzureChinaCloud`, `AzureUSGovernmentCloud`, `AzureGermanCloud`.                                                                                                                    | `AzureCloud`                   |
-| `chunk_keys` (buffer section)          | Only in buffered mode. Keys to use for chunking the buffer. Possible values: `tag`, `time`, or a combination such as `["tag", "time"]`. Controls how data is grouped and flushed.                                               | `["time"]`                    |
-| `timekey` (buffer section)             | Only in buffered mode. Time interval for buffer chunking. Possible values: integer seconds (e.g., `60`, `3600`, `86400`).                                                                                                         | `86400` (1 day)                |
-| `timekey_wait` (buffer section)        | Only in buffered mode. Wait time before flushing a timekey chunk after its time window closes. Possible values: duration string (e.g., `30s`, `5m`).                                                                             | `30s`                           |
-| `timekey_use_utc` (buffer section)     | Only in buffered mode. Use UTC for timekey chunking. Possible values: `true`, `false`.                                                                                                                                           | `true`                          |
-| `flush_at_shutdown` (buffer section)   | Only in buffered mode. Flush buffer at shutdown. Possible values: `true`, `false`.                                                                                                                                               | `true`                          |
-| `retry_max_times` (buffer section)     | Only in buffered mode. Maximum number of retry attempts for buffer flush. Possible values: integer (e.g., `5`, `10`).                                                                                                            | `5`                             |
-| `retry_wait` (buffer section)          | Only in buffered mode. Wait time between buffer flush retries. Possible values: duration string (e.g., `1s`, `10s`).                                                                                                             | `1s`                            |
-| `overflow_action` (buffer section)     | Only in buffered mode. Action to take when buffer overflows. Possible values: `block`, `drop_oldest_chunk`, `throw_exception`.                                                            | `block`                         |
-| `chunk_limit_size` (buffer section)    | Only in buffered mode. Maximum size per buffer chunk. Possible values: size string (e.g., `256m`, `1g`).                                                                                                                         | `256m`                          |
-| `total_limit_size` (buffer section)    | Only in buffered mode. Maximum total buffer size. Possible values: size string (e.g., `2g`, `10g`).                                                                                                                              | `2g`                            |
-| `flush_mode` (buffer section)          | Only in buffered mode. Buffer flush mode. Possible values: `interval`, `immediate`, `lazy`.                                                                                               | `interval`                      |
-| `flush_interval` (buffer section)      | Only in buffered mode. Interval for buffer flush. Possible values: duration string (e.g., `10s`, `1m`).                                                                                                                          | `10s`                           |
-| `logger_path`                           | Optional. File path for plugin log output. If not set, logs are written to stdout.                                                                                                                      | stdout(terminal)                        |
-| `auth_type`                            | The authentication type to use. Possible values: `aad`, `user_managed_identity`, `system_managed_identity`,`workload_identity`.                                                                                                                                                                                                                                     | `aad`                        |
-| `workload_identity_client_id`              | The client ID for Azure Workload Identity authentication. Required if using workload identity for authentication.                                                                                                               | _none_                         |
-| `workload_identity_tenant_id`              | The tenant ID for Azure Workload Identity authentication. Required if using workload identity for authentication.                                                                                                               | _none_                         |
-| `workload_identity_token_file`             | The file path to the token file for Azure Workload Identity authentication. Required if using workload identity for authentication.                                                                                             | `/var/run/secrets/azure/tokens/azure-identity-token`                        |
+This plugin supports four authentication methods for connecting to Azure Data Explorer:
 
-## Sample Configuration
+### 1. Azure AD Application (aad)
+Traditional client credentials flow using Azure AD app registration. Best for CI/CD pipelines and traditional applications.
 
+**Required Parameters:**
+- `auth_type`: `aad`
+- `tenant_id`: Your Azure AD tenant ID
+- `client_id`: The Azure AD application client ID
+- `client_secret`: The Azure AD application client secret
+
+### 2. System-Assigned Managed Identity (system_managed_identity)
+Uses the system-assigned managed identity of Azure resources (VMs, App Services, AKS nodes). No secrets to manage.
+
+**Required Parameters:**
+- `auth_type`: `system_managed_identity`
+- `managed_identity_client_id`: Set to `SYSTEM`
+
+### 3. User-Assigned Managed Identity (user_managed_identity)
+Uses a user-assigned managed identity. Allows sharing the same identity across multiple Azure resources.
+
+**Required Parameters:**
+- `auth_type`: `user_managed_identity`
+- `managed_identity_client_id`: The client ID (GUID) of the user-assigned managed identity
+
+### 4. Azure Workload Identity (workload_identity)
+Modern approach for Kubernetes/AKS workloads. Replaces the legacy Pod Identity system using OIDC federation.
+
+**Required Parameters:**
+- `auth_type`: `workload_identity`
+- `workload_identity_client_id`: The client ID for workload identity
+- `workload_identity_tenant_id`: The tenant ID for workload identity
+- `workload_identity_token_file_path`: Path to the workload identity token file (optional, defaults to `/var/run/secrets/azure/tokens/azure-identity-token`)
+
+## Data Schema and Ingestion Mapping
+
+### Fixed 3-Column Schema
+The plugin uses a standardized 3-column schema for all ingested data:
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `tag` | string | The Fluentd event tag |
+| `timestamp` | datetime | The event timestamp |
+| `record` | dynamic | The actual event payload as JSON |
+
+### Recommended Pattern: Landing Table + Update Policy
+
+Since the plugin doesn't support custom ingestion mappings, use this pattern for schema transformation:
+
+```kql
+-- 1. Create landing table (matches plugin output)
+.create table RawLogs (tag:string, timestamp:datetime, record:dynamic)
+
+-- 2. Create your target table with desired schema
+.create table ProcessedLogs (
+    EventTime: datetime,
+    Source: string,
+    Level: string,
+    Message: string,
+    UserId: string,
+    Properties: dynamic
+)
+
+-- 3. Create update policy to transform data
+.alter table ProcessedLogs policy update
+@'[{
+    "IsEnabled": true,
+    "Source": "RawLogs",
+    "Query": "RawLogs | extend EventTime=timestamp, Source=tag, Level=tostring(record.level), Message=tostring(record.message), UserId=tostring(record.userId), Properties=record.properties | project EventTime, Source, Level, Message, UserId, Properties",
+    "IsTransactional": true,
+    "PropagateIngestionProperties": false
+}]'
+```
+
+This approach provides flexibility to transform the generic 3-column format into any schema you need.
+
+## Configuration Parameters
+
+| Key | Description | Default |
+| --- | ----------- | ------- |
+| `auth_type` | Authentication method: `aad`, `system_managed_identity`, `user_managed_identity`, `workload_identity` | `aad` |
+| `tenant_id` | Azure AD tenant ID. Required for `aad` authentication. | _none_ |
+| `client_id` | Azure AD application client ID. Required for `aad` authentication. | _none_ |
+| `client_secret` | Azure AD application client secret. Required for `aad` authentication. | _none_ |
+| `managed_identity_client_id` | For managed identity: `SYSTEM` for system-assigned, or client ID (GUID) for user-assigned. | _none_ |
+| `workload_identity_client_id` | Client ID for workload identity authentication. | _none_ |
+| `workload_identity_tenant_id` | Tenant ID for workload identity authentication. | _none_ |
+| `workload_identity_token_file_path` | Path to workload identity token file. | `/var/run/secrets/azure/tokens/azure-identity-token` |
+| `endpoint` | Kusto cluster endpoint (e.g., `https://cluster.region.kusto.windows.net`) | _none_ |
+| `database_name` | Target database name. | _none_ |
+| `table_name` | Target table name. | _none_ |
+| `compression_enabled` | Enable gzip compression for HTTP payload. | `true` |
+| `buffered` | Enable disk buffering before ingestion. | `true` |
+| `delayed` | Enable delayed commit for buffer chunks (requires `buffered: true`). | `false` |
+| `deferred_commit_timeout` | Max time (seconds) to wait for deferred commit verification. | `30` |
+| `azure_cloud` | Azure cloud environment: `AzureCloud`, `AzureChinaCloud`, `AzureUSGovernmentCloud`, `AzureGermanCloud` | `AzureCloud` |
+| `logger_path` | File path for plugin logs. If not set, logs to stdout. | stdout |
+
+### Buffer Configuration (buffered mode only)
+| Key | Description | Default |
+| --- | ----------- | ------- |
+| `chunk_keys` | Buffer chunking keys: `tag`, `time`, or `["tag", "time"]` | `["time"]` |
+| `timekey` | Time interval for buffer chunking (seconds) | `86400` (1 day) |
+| `timekey_wait` | Wait time before flushing timekey chunk | `30s` |
+| `timekey_use_utc` | Use UTC for timekey chunking | `true` |
+| `flush_at_shutdown` | Flush buffer at shutdown | `true` |
+| `retry_max_times` | Maximum retry attempts for buffer flush | `5` |
+| `retry_wait` | Wait time between retries | `1s` |
+| `overflow_action` | Action on buffer overflow: `block`, `drop_oldest_chunk`, `throw_exception` | `block` |
+| `chunk_limit_size` | Maximum size per buffer chunk | `256m` |
+| `total_limit_size` | Maximum total buffer size | `2g` |
+| `flush_mode` | Buffer flush mode: `interval`, `immediate`, `lazy` | `interval` |
+| `flush_interval` | Buffer flush interval | `10s` |
+
+## Sample Configurations
+
+### 1. Azure AD Authentication
 ```conf
-<system>
-  workers 1
-</system>
 <match test.kusto>
   @type kusto
   @log_level debug
+  
+  # Authentication - Azure AD
+  auth_type aad
+  tenant_id 12345678-1234-1234-1234-123456789abc
+  client_id 87654321-4321-4321-4321-abcdef123456
+  client_secret your-app-secret-here
+  
+  # Kusto connection
+  endpoint https://mycluster.eastus.kusto.windows.net
+  database_name MyDatabase
+  table_name MyLogs
+  
+  # Optional settings
+  azure_cloud AzureCloud
+  compression_enabled true
   buffered true
   delayed false
-  endpoint https://yourcluster.region.kusto.windows.net
-  database_name your-db
-  table_name your-table
-  tenant_id <your-tenant-id>
-  client_id <your-client-id>
-  managed_identity_client_id SYSTEM
-  compression_enabled true
-  azure_cloud AzureCloud
-  logger_path /var/log/azure-kusto-fluentd.log
+  
   <buffer>
     @type memory
-    # To chunk by tag only:
-    # chunk_keys tag
-    # To chunk by tag and time:
-    # chunk_keys tag,time
     timekey 1m
     timekey_wait 30s
-    timekey_use_utc true
-    flush_at_shutdown true
-    retry_max_times 5
-    retry_wait 1s
-    overflow_action block
-    chunk_limit_size 256m
-    total_limit_size 2g
-    flush_mode interval
+    flush_interval 10s
+  </buffer>
+</match>
+```
+
+### 2. System-Assigned Managed Identity
+```conf
+<match test.kusto>
+  @type kusto
+  @log_level debug
+  
+  # Authentication - System Managed Identity
+  auth_type system_managed_identity
+  managed_identity_client_id SYSTEM
+  
+  # Kusto connection
+  endpoint https://mycluster.eastus.kusto.windows.net
+  database_name MyDatabase
+  table_name MyLogs
+  
+  # Optional settings
+  azure_cloud AzureCloud
+  compression_enabled true
+  buffered true
+  delayed false
+  
+  <buffer>
+    @type memory
+    timekey 1m
+    timekey_wait 30s
+    flush_interval 10s
+  </buffer>
+</match>
+```
+
+### 3. User-Assigned Managed Identity
+```conf
+<match test.kusto>
+  @type kusto
+  @log_level debug
+  
+  # Authentication - User Managed Identity
+  auth_type user_managed_identity
+  managed_identity_client_id 11111111-2222-3333-4444-555555555555
+  
+  # Kusto connection
+  endpoint https://mycluster.eastus.kusto.windows.net
+  database_name MyDatabase
+  table_name MyLogs
+  
+  # Optional settings
+  azure_cloud AzureCloud
+  compression_enabled true
+  buffered true
+  delayed false
+  
+  <buffer>
+    @type memory
+    timekey 1m
+    timekey_wait 30s
+    flush_interval 10s
+  </buffer>
+</match>
+```
+
+### 4. Azure Workload Identity (Kubernetes/AKS)
+```conf
+<match test.kusto>
+  @type kusto
+  @log_level debug
+  
+  # Authentication - Workload Identity
+  auth_type workload_identity
+  workload_identity_client_id 99999999-8888-7777-6666-555555555555
+  workload_identity_tenant_id 12345678-1234-1234-1234-123456789abc
+  workload_identity_token_file_path /var/run/secrets/azure/tokens/azure-identity-token
+  
+  # Kusto connection
+  endpoint https://mycluster.eastus.kusto.windows.net
+  database_name MyDatabase
+  table_name MyLogs
+  
+  # Optional settings
+  azure_cloud AzureCloud
+  compression_enabled true
+  buffered true
+  delayed false
+  
+  <buffer>
+    @type memory
+    timekey 1m
+    timekey_wait 30s
     flush_interval 10s
   </buffer>
 </match>

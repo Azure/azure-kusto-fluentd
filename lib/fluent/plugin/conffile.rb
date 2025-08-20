@@ -118,7 +118,7 @@ class OutputConfiguration
       'database_name' => @database_name,
       'table_name' => @table_name
     }
-    check_required_configs(required, %w[client_app_id tenant_id kusto_endpoint database_name table_name])
+    check_required_configs(required, %w[workload_identity_client_id workload_identity_tenant_id kusto_endpoint database_name table_name])
   end
 
   def aad_required_hash
