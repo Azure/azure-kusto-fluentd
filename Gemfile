@@ -2,7 +2,7 @@
 
 source 'https://rubygems.org'
 
-gemspec
+gemspec name: 'fluent-plugin-kusto'
 gem 'fiddle'
 gem 'mocha'
 gem 'ostruct'
