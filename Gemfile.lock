@@ -1,8 +1,8 @@
 PATH
   remote: .
   specs:
-    azure-kusto-fluentd (0.1.0)
-      dotenv
+    fluent-plugin-kusto (0.0.1.beta)
+      dotenv (~> 2.0)
       fluentd (>= 1.0, < 2)
 
 GEM
@@ -122,9 +122,9 @@ PLATFORMS
   x86_64-linux
 
 DEPENDENCIES
-  azure-kusto-fluentd!
   bundler (~> 2.6.9)
   fiddle
+  fluent-plugin-kusto!
   mocha
   ostruct
   rake (~> 13.2.1)
