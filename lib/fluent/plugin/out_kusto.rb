@@ -33,6 +33,8 @@ module Fluent
       config_param :azure_cloud, :string, default: 'AzureCloud'
       config_param :compression_enabled, :bool, default: true
       config_param :logger_path, :string, default: nil
+      config_param :ingestion_mapping_reference, :string, default: nil,
+                                                          desc: 'Name of a pre-defined ingestion mapping in Kusto for data transformation during ingestion.'
       config_param :auth_type, :string, default: 'aad',
                                         desc: 'Authentication type to use for Kusto. Options: "aad", "user_managed_identity", "system_managed_identity", "workload_identity".'
       config_param :workload_identity_client_id, :string, default: nil, secret: true,
@@ -164,7 +166,7 @@ module Fluent
                                                                                                      '_')
           blob_name = "fluentd_event_#{safe_tag}.json"
           @ingester.upload_data_to_blob_and_queue(formatted, blob_name, @database_name, @table_name,
-                                                  compression_enabled)
+                                                  compression_enabled, @ingestion_mapping_reference)
         rescue StandardError => e
           @logger&.error("Failed to ingest event to Kusto: #{e}\nEvent skipped: #{record.inspect}\n#{e.backtrace.join("\n")}")
           next
@@ -184,7 +186,7 @@ module Fluent
         data_to_upload = compression_enabled ? compress_data(raw_data) : raw_data
         begin
           @ingester.upload_data_to_blob_and_queue(data_to_upload, blob_name, @database_name, @table_name,
-                                                  compression_enabled)
+                                                  compression_enabled, @ingestion_mapping_reference)
         rescue StandardError => e
           handle_kusto_error(e, unique_id)
         end
@@ -224,7 +226,7 @@ module Fluent
         data_to_upload = compression_enabled ? compress_data(updated_raw_data) : updated_raw_data
         begin
           @ingester.upload_data_to_blob_and_queue(data_to_upload, blob_name, @database_name, @table_name,
-                                                  compression_enabled)
+                                                  compression_enabled, @ingestion_mapping_reference)
           if @shutdown_called || !@delayed
             commit_write(chunk.unique_id)
             if @shutdown_called

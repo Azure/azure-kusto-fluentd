@@ -163,9 +163,36 @@ The plugin uses a standardized 3-column schema for all ingested data:
 | `timestamp` | datetime | The event timestamp |
 | `record` | dynamic | The actual event payload as JSON |
 
-### Recommended Pattern: Landing Table + Update Policy
+### Ingestion Mapping Support
+You can now use pre-defined ingestion mappings in Kusto to transform data during ingestion by setting the `ingestion_mapping_reference` parameter. This allows you to:
 
-Since the plugin doesn't support custom ingestion mappings, use this pattern for schema transformation:
+- Transform the default 3-column format into your desired schema
+- Apply data transformations during ingestion for better performance
+- Use Kusto's native ingestion mapping capabilities
+
+**Example:**
+```conf
+<match test.kusto>
+  @type kusto
+  # ... other configuration ...
+  ingestion_mapping_reference my_custom_mapping
+</match>
+```
+
+Then create the mapping in Kusto:
+```kql
+.create table MyTable ingestion json mapping "my_custom_mapping" 
+@'[
+  {"column":"EventTime", "path":"$.timestamp", "datatype":"datetime"},
+  {"column":"Source", "path":"$.tag", "datatype":"string"},
+  {"column":"Level", "path":"$.record.level", "datatype":"string"},
+  {"column":"Message", "path":"$.record.message", "datatype":"string"}
+]'
+```
+
+### Alternative Pattern: Landing Table + Update Policy
+
+If you prefer not to use ingestion mappings, you can still use this pattern for schema transformation:
 
 ```kql
 -- 1. Create landing table (matches plugin output)
@@ -213,6 +240,7 @@ This approach provides flexibility to transform the generic 3-column format into
 | `buffered` | Enable disk buffering before ingestion. | `true` |
 | `delayed` | Enable delayed commit for buffer chunks (requires `buffered: true`). | `false` |
 | `deferred_commit_timeout` | Max time (seconds) to wait for deferred commit verification. | `30` |
+| `ingestion_mapping_reference` | Name of a pre-defined ingestion mapping in Kusto for data transformation during ingestion. | _none_ |
 | `azure_cloud` | Azure cloud environment: `AzureCloud`, `AzureChinaCloud`, `AzureUSGovernmentCloud`, `AzureGermanCloud` | `AzureCloud` |
 | `logger_path` | File path for plugin logs. If not set, logs to stdout. | stdout |
 

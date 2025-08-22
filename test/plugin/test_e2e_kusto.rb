@@ -680,4 +680,253 @@ class KustoE2ETest < Test::Unit::TestCase
   end
 
   # ESSENTIAL E2E BUFFERING TEST CASES - END
+
+  # INGESTION MAPPING REFERENCE TESTS - START
+  
+  # Test ingestion with mapping reference specified
+  test 'ingestion_with_mapping_reference' do
+    test_table = "FluentD_mapping_ref_#{Time.now.to_i}"
+    mapping_name = "test_mapping_#{Time.now.to_i}"
+    
+    # Create table and mapping
+    kusto_query(".drop table #{test_table} ifexists", :management)
+    kusto_query(".create table #{test_table} (tag:string, timestamp:datetime, record:dynamic)", :management)
+    kusto_query(<<~MAPPING_QUERY, :management)
+      .create table #{test_table} ingestion json mapping "#{mapping_name}" 
+      '[{"column":"tag","path":"$.tag"},{"column":"timestamp","path":"$.timestamp"},{"column":"record","path":"$.record"}]'
+    MAPPING_QUERY
+    
+    # Configure driver with mapping reference
+    config_options = {
+      table_name: test_table,
+      buffered: true,
+      delayed: true
+    }
+    
+    # Add ingestion_mapping_reference if specified
+    mapping_config = config_options[:ingestion_mapping_reference] ? "ingestion_mapping_reference #{config_options[:ingestion_mapping_reference]}" : ''
+    
+    @conf = <<-CONF
+      @type kusto
+      @log_level debug
+      buffered #{config_options[:buffered]}
+      delayed #{config_options[:delayed]}
+      endpoint #{@engine_url}
+      database_name #{@database}
+      table_name #{config_options[:table_name]}
+      compression_enabled true
+      ingestion_mapping_reference #{mapping_name}
+      #{@auth_lines}
+      <buffer>
+        @type memory
+        chunk_limit_size 8k
+        flush_interval 3s
+        flush_mode interval
+      </buffer>
+    CONF
+
+    @driver = Fluent::Test::Driver::Output.new(Fluent::Plugin::KustoOutput).configure(@conf)
+    @driver.instance.instance_variable_set(:@logger, @logger)
+    @driver.instance.start
+
+    tag = 'e2e.mapping_ref'
+    events = [
+      [Time.now.to_i, { 'id' => 8001, 'name' => 'mapping_test_1', 'type' => 'with_mapping' }],
+      [Time.now.to_i + 1, { 'id' => 8002, 'name' => 'mapping_test_2', 'type' => 'with_mapping' }],
+      [Time.now.to_i + 2, { 'id' => 8003, 'name' => 'mapping_test_3', 'type' => 'with_mapping' }]
+    ]
+
+    @driver.run(default_tag: tag) do
+      events.each do |time, record|
+        @driver.feed(tag, time, record)
+      end
+      sleep 8
+    end
+
+    query = "#{test_table} | extend r = parse_json(record) | where r.id >= 8001 and r.id <= 8003"
+    rows = wait_for_ingestion(query, 3)
+
+    assert(rows.size >= 3, "Expected 3 records with mapping reference, got #{rows.size}")
+    
+    # Verify the mapping was used by checking data structure
+    found_with_mapping = false
+    rows.each do |row|
+      r = row[2] # record column should be dynamic
+      if r && r['id'] && r['id'] >= 8001 && r['id'] <= 8003
+        found_with_mapping = true
+        break
+      end
+    end
+    
+    assert(found_with_mapping, 'Expected records with mapping reference not found')
+    
+    # Clean up mapping
+    kusto_query(".drop table #{test_table} ingestion json mapping '#{mapping_name}'", :management)
+  end
+
+  # Test ingestion without mapping reference (default behavior)
+  test 'ingestion_without_mapping_reference' do
+    test_table = "FluentD_no_mapping_#{Time.now.to_i}"
+    
+    # Create table without specific mapping
+    kusto_query(".drop table #{test_table} ifexists", :management)
+    kusto_query(".create table #{test_table} (tag:string, timestamp:datetime, record:string)", :management)
+    
+    configure_and_start_driver(
+      table_name: test_table,
+      buffered: true,
+      delayed: false
+      # No ingestion_mapping_reference specified
+    )
+
+    tag = 'e2e.no_mapping'
+    events = [
+      [Time.now.to_i, { 'id' => 9001, 'name' => 'no_mapping_test_1', 'type' => 'default' }],
+      [Time.now.to_i + 1, { 'id' => 9002, 'name' => 'no_mapping_test_2', 'type' => 'default' }]
+    ]
+
+    @driver.run(default_tag: tag) do
+      events.each do |time, record|
+        @driver.feed(tag, time, record)
+      end
+      sleep 6
+    end
+
+    query = "#{test_table} | extend r = parse_json(record) | where r.id >= 9001 and r.id <= 9002"
+    rows = wait_for_ingestion(query, 2)
+
+    assert(rows.size >= 2, "Expected 2 records without mapping reference, got #{rows.size}")
+    
+    # Verify default string serialization was used
+    found_default_format = false
+    rows.each do |row|
+      record_str = row[2] # record column should be string
+      if record_str.is_a?(String) && record_str.include?('"id":900')
+        found_default_format = true
+        break
+      end
+    end
+    
+    assert(found_default_format, 'Expected default JSON string format not found')
+  end
+
+  # Test ingestion mapping with delayed commit
+  test 'ingestion_mapping_with_delayed_commit' do
+    test_table = "FluentD_mapping_delayed_#{Time.now.to_i}"
+    mapping_name = "delayed_mapping_#{Time.now.to_i}"
+    
+    # Create table and mapping
+    kusto_query(".drop table #{test_table} ifexists", :management)
+    kusto_query(".create table #{test_table} (tag:string, timestamp:datetime, record:dynamic)", :management)
+    kusto_query(<<~MAPPING_QUERY, :management)
+      .create table #{test_table} ingestion json mapping "#{mapping_name}" 
+      '[{"column":"tag","path":"$.tag"},{"column":"timestamp","path":"$.timestamp"},{"column":"record","path":"$.record"}]'
+    MAPPING_QUERY
+    
+    # Configure with both mapping reference and delayed commit
+    @conf = <<-CONF
+      @type kusto
+      @log_level debug
+      buffered true
+      delayed true
+      endpoint #{@engine_url}
+      database_name #{@database}
+      table_name #{test_table}
+      compression_enabled true
+      ingestion_mapping_reference #{mapping_name}
+      deferred_commit_timeout 20
+      #{@auth_lines}
+      <buffer>
+        @type memory
+        chunk_limit_size 4k
+        flush_interval 5s
+        flush_mode interval
+      </buffer>
+    CONF
+
+    @driver = Fluent::Test::Driver::Output.new(Fluent::Plugin::KustoOutput).configure(@conf)
+    @driver.instance.instance_variable_set(:@logger, @logger)
+    @driver.instance.start
+
+    tag = 'e2e.mapping_delayed'
+    events = [
+      [Time.now.to_i, { 'id' => 10001, 'name' => 'delayed_mapping_1', 'type' => 'delayed_with_mapping' }],
+      [Time.now.to_i + 1, { 'id' => 10002, 'name' => 'delayed_mapping_2', 'type' => 'delayed_with_mapping' }],
+      [Time.now.to_i + 2, { 'id' => 10003, 'name' => 'delayed_mapping_3', 'type' => 'delayed_with_mapping' }]
+    ]
+
+    @driver.run(default_tag: tag) do
+      events.each do |time, record|
+        @driver.feed(tag, time, record)
+      end
+      sleep 10
+    end
+
+    query = "#{test_table} | extend r = parse_json(record) | where r.id >= 10001 and r.id <= 10003"
+    rows = wait_for_ingestion(query, 3, 60) # Allow more time for delayed commit
+
+    assert(rows.size >= 3, "Expected 3 records with mapping and delayed commit, got #{rows.size}")
+    
+    # Verify chunk_id exists (from delayed commit) and mapping was applied
+    chunk_ids = []
+    mapped_records = 0
+    
+    rows.each do |row|
+      r = row[2] # record column
+      if r && r['chunk_id'] # Should have chunk_id from delayed commit
+        chunk_ids << r['chunk_id']
+      end
+      if r && r['id'] && r['id'] >= 10001 && r['id'] <= 10003
+        mapped_records += 1
+      end
+    end
+    
+    assert(chunk_ids.uniq.size >= 1, 'Expected chunk_ids from delayed commit not found')
+    assert(mapped_records >= 3, 'Expected mapped records not found')
+    
+    # Clean up mapping
+    kusto_query(".drop table #{test_table} ingestion json mapping '#{mapping_name}'", :management)
+  end
+
+  # Test configuration validation for ingestion_mapping_reference
+  test 'ingestion_mapping_reference_configuration' do
+    test_table = "FluentD_config_test_#{Time.now.to_i}"
+    setup_test_table(test_table)
+    
+    # Test that plugin accepts ingestion_mapping_reference parameter
+    config_with_mapping = <<-CONF
+      @type kusto
+      buffered false
+      endpoint #{@engine_url}
+      database_name #{@database}
+      table_name #{test_table}
+      ingestion_mapping_reference test_mapping_name
+      #{@auth_lines}
+    CONF
+    
+    driver_with_mapping = nil
+    assert_nothing_raised('Configuration with ingestion_mapping_reference should be valid') do
+      driver_with_mapping = Fluent::Test::Driver::Output.new(Fluent::Plugin::KustoOutput).configure(config_with_mapping)
+    end
+    
+    # Verify the parameter is accessible
+    plugin_instance = driver_with_mapping.instance
+    assert_respond_to(plugin_instance, :ingestion_mapping_reference, 'Plugin should respond to ingestion_mapping_reference')
+    
+    # Test without mapping reference
+    config_without_mapping = <<-CONF
+      @type kusto
+      buffered false
+      endpoint #{@engine_url}
+      database_name #{@database}
+      table_name #{test_table}
+      #{@auth_lines}
+    CONF
+    
+    assert_nothing_raised('Configuration without ingestion_mapping_reference should be valid') do
+      Fluent::Test::Driver::Output.new(Fluent::Plugin::KustoOutput).configure(config_without_mapping)
+    end
+  end
+
+  # INGESTION MAPPING REFERENCE TESTS - END
 end

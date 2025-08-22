@@ -15,16 +15,17 @@ Gem::Specification.new do |spec|
   spec.homepage      = 'https://github.com/Azure/azure-kusto-fluentd'
   spec.license       = 'Apache-2.0'
 
-  spec.required_ruby_version = '>= 2.5'
+  spec.required_ruby_version = '>= 2.7.0'
 
   spec.files         = Dir['lib/**/*.rb', 'test/**/*', 'README.md', 'LICENSE', 'Gemfile']
   spec.test_files    = spec.files.grep(%r{^(test|spec|features)/})
   spec.require_paths = ['lib']
   spec.metadata      = { 'fluentd_plugin' => 'true', 'fluentd_group' => 'output' }
 
-  spec.add_development_dependency 'bundler', '~> 2.6.9'
-  spec.add_development_dependency 'rake', '~> 13.2.1'
-  spec.add_development_dependency 'test-unit', '~> 3.6.7'
+  spec.add_development_dependency 'bundler', '>= 2.0'
+  spec.add_development_dependency 'rake', '~> 13.0'
+  spec.add_development_dependency 'test-unit', '~> 3.0'
+  spec.add_development_dependency 'fluentd', '>= 1.0', '< 2'
   spec.add_runtime_dependency 'fluentd', '>= 1.0', '< 2'
   spec.add_development_dependency 'rubocop', '~> 1.0'
   spec.add_dependency 'dotenv', '~> 2.0'

@@ -77,13 +77,15 @@ class Ingester
   # rubocop:enable Metrics/AbcSize, Metrics/MethodLength
 
   # rubocop:disable Metrics/MethodLength
-  def prepare_ingestion_message2(db, table, data_uri, blob_size_bytes, identity_token, compression_enabled = true)
+  def prepare_ingestion_message2(db, table, data_uri, blob_size_bytes, identity_token, compression_enabled = true, mapping_reference = nil)
     # Prepare the ingestion message for Azure Queue
     additional_props = {
       'authorizationContext' => identity_token,
       'format' => 'multijson'
     }
     additional_props['CompressionType'] = 'gzip' if compression_enabled
+    additional_props['ingestionMappingReference'] = mapping_reference if mapping_reference && !mapping_reference.empty?
+    
     {
       'Id' => SecureRandom.uuid,
       'BlobPath' => data_uri,
@@ -120,11 +122,11 @@ class Ingester
   end
   # rubocop:enable Metrics/AbcSize, Metrics/MethodLength
 
-  def upload_data_to_blob_and_queue(raw_data, blob_name, db, table_name, compression_enabled = true)
+  def upload_data_to_blob_and_queue(raw_data, blob_name, db, table_name, compression_enabled = true, mapping_reference = nil)
     # Upload data to blob and send ingestion message to queue
     blob_uri, blob_size_bytes = upload_to_blob(@resources[:blob_sas_uri], raw_data, blob_name)
     message = prepare_ingestion_message2(db, table_name, blob_uri, blob_size_bytes, @resources[:identity_token],
-                                         compression_enabled)
+                                         compression_enabled, mapping_reference)
     post_message_to_queue_http(@resources[:queue_sas_uri], message)
     { blob_uri: blob_uri, blob_size_bytes: blob_size_bytes }
   end
