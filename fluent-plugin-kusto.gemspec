@@ -5,7 +5,7 @@ $LOAD_PATH.unshift(lib) unless $LOAD_PATH.include?(lib)
 
 Gem::Specification.new do |spec|
   spec.name          = 'fluent-plugin-kusto'
-  spec.version       = '0.0.1.beta'
+  spec.version       = '0.0.2.beta'
   spec.authors       = ['Komal Rani', 'Kusto OSS IDC Team']
   spec.email         = ['t-komalrani+microsoft@microsoft.com', 'kustoossidc@microsoft.com']
 

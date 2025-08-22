@@ -243,7 +243,7 @@ class KustoE2ETest < Test::Unit::TestCase
     kusto_query(".create table #{table_name} #{@columns}", :management)
   end
 
-  def wait_for_ingestion(query, expected_count, max_wait = 240, interval = 5)
+  def wait_for_ingestion(query, expected_count, max_wait = 480, interval = 5)
     waited = 0
     rows = []
 
@@ -597,7 +597,7 @@ class KustoE2ETest < Test::Unit::TestCase
       delayed: true,
       chunk_limit_size: '300', # Small chunks to force multiple
       flush_interval: '4s',
-      deferred_commit_timeout: 15
+      deferred_commit_timeout: 60  # Increased timeout
     )
     setup_test_table(table_name)
 
@@ -608,11 +608,11 @@ class KustoE2ETest < Test::Unit::TestCase
       events.each do |time, record|
         @driver.feed(tag, time, record)
       end
-      sleep 10
+      sleep 15  # Increased sleep time
     end
 
     query = "#{table_name} | extend r = parse_json(record) | where r.id >= 6000 and r.id <= 6011"
-    rows = wait_for_ingestion(query, 12)
+    rows = wait_for_ingestion(query, 12, 600)  # Increased wait time to 10 minutes
 
     assert(rows.size >= 12, "Expected 12 records, got #{rows.size} in delayed commit multiple chunks")
 

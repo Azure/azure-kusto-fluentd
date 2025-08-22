@@ -18,6 +18,7 @@ class ManagedIdentityTokenProvider < AbstractTokenProvider
 
   def initialize(outconfiguration)
     super(outconfiguration)
+    setup_config(outconfiguration)
     token_request_params_set(outconfiguration)
   end
 
@@ -39,7 +40,7 @@ class ManagedIdentityTokenProvider < AbstractTokenProvider
 
   def token_request_params_set(_outconfiguration)
     token_acquire_url = IMDS_TOKEN_ACQUIRE_URL.dup + '?' + append_header('resource',
-                                                                         ERB::Util.url_encode(outconfiguration.kusto_endpoint)) + '&' + append_header(
+                                                                         ERB::Util.url_encode(@resource)) + '&' + append_header(
                                                                            'api-version', '2018-02-01'
                                                                          )
     unless @object_id.nil?
@@ -50,11 +51,11 @@ class ManagedIdentityTokenProvider < AbstractTokenProvider
       token_acquire_url = (token_acquire_url + '&' + append_header('msi_res_id',
                                                                    ERB::Util.url_encode(@msi_res_id)))
     end
-    URI.parse(token_acquire_url)
-    return unless @use_user_assigned
-
-    (token_acquire_url + '&' + append_header('client_id',
-                                             ERB::Util.url_encode(@managed_identity_client_id)))
+    if @use_user_assigned
+      token_acquire_url = (token_acquire_url + '&' + append_header('client_id',
+                                               ERB::Util.url_encode(@managed_identity_client_id)))
+    end
+    @token_acquire_url = token_acquire_url
   end
 
   def fetch_token

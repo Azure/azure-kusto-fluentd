@@ -9,6 +9,10 @@ class WorkloadIdentity < AbstractTokenProvider
   DEFAULT_TOKEN_FILE = '/var/run/secrets/azure/tokens/azure-identity-token'
   AZURE_OAUTH2_TOKEN_ENDPOINT = 'https://login.microsoftonline.com/%<tenant_id>s/oauth2/v2.0/token'
 
+  def initialize(outconfiguration)
+    super(outconfiguration)
+  end
+
   # Use get_token from base class for token retrieval
 
   private

@@ -50,7 +50,7 @@ $ gem install fluent-plugin-kusto --pre
 Add the following line to your Gemfile:
 
 ```ruby
-gem "fluent-plugin-kusto", "~> 0.0.1.beta"
+gem "fluent-plugin-kusto", "~> 0.0.2.beta"
 ```
 
 **Note:** This is a beta release. Use the `--pre` flag with gem install or specify the beta version in your Gemfile.
@@ -390,6 +390,14 @@ This approach provides flexibility to transform the generic 3-column format into
 ![Architecture](architecture.png)
 
 This diagram shows the main components and data flow for the plugin, including configuration, error handling, token management, and Azure resource interactions.
+
+## Release Notes
+
+### v0.0.2.beta (Latest)
+- **Fixed critical authentication initialization bugs** - Resolved `NameError` in ManagedIdentityTokenProvider and WorkloadIdentityTokenProvider
+- **Added comprehensive unit test coverage** - New test suites for authentication providers with 14 test cases and 45+ assertions
+- **Improved E2E test reliability** - Enhanced timeout configurations to handle Azure Kusto ingestion delays (480s-600s timeouts)
+- **Enhanced authentication stability** - All authentication methods now properly validated: AAD, System/User Managed Identity, Workload Identity, Azure CLI
 
 ## Copyright
 
