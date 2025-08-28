@@ -11,6 +11,7 @@ require 'json'
 require_relative '../../lib/fluent/plugin/kusto_query'
 require_relative '../../lib/fluent/plugin/ingester'
 require_relative '../../lib/fluent/plugin/conffile'
+require_relative '../../lib/fluent/plugin/kusto_version'
 require 'ostruct'
 require 'logger'
 require 'concurrent'
@@ -104,7 +105,9 @@ class KustoE2ETest < Test::Unit::TestCase
       'Authorization' => "Bearer #{token}",
       'Content-Type' => 'application/json',
       'Accept' => 'application/json',
-      'x-ms-client-version' => 'Kusto.FluentD:1.0.0'
+      'x-ms-client-version' => "Kusto.FluentD:#{Fluent::Plugin::Kusto::VERSION}",
+      'x-ms-app' => 'Kusto.FluentD',
+      'x-ms-user' => 'Kusto.FluentD'
     }
 
     body_hash = { csl: query }
