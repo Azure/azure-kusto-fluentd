@@ -1,0 +1,79 @@
+name: build-and-e2e
+on:
+  push:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+jobs:
+  build_and_e2e:
+    name: Build, Test, and E2E Fluentd Plugin
+    runs-on: ubuntu-latest
+    environment: build
+    timeout-minutes: 30
+    permissions:
+      checks: write
+      pull-requests: write
+      id-token: write
+      contents: read
+    env:
+      CLUSTER: ${{ secrets.CLUSTER }}
+      DB: ${{ secrets.DB }}
+      TENANT_ID: ${{ secrets.TENANT_ID }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.APP_ID }}
+          tenant-id: ${{ secrets.TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.1'
+          bundler-cache: true
+          cache-version: 1
+          
+      - name: Configure bundler
+        run: |
+          bundle config set --local frozen false
+          bundle config set --local deployment false
+          
+      - name: Install dependencies
+        run: bundle install
+        working-directory: .
+        
+      - name: Run unit tests
+        run: bundle exec rake test TEST="test/plugin/test_out_kusto_*.rb"
+        working-directory: .
+        timeout-minutes: 10
+        
+      - name: Build gem
+        run: gem build fluent-plugin-kusto.gemspec
+        working-directory: .
+        
+      - name: Install Fluentd
+        run: gem install fluentd
+        
+      - name: Install plugin
+        run: gem install fluent-plugin-kusto-*.gem
+        
+      - name: Run e2e
+        env:
+          AUTH_TYPE: 'azcli'
+          CLUSTER: ${{ secrets.CLUSTER }}
+          DB: ${{ secrets.DB }}
+        run: bundle exec rake test TEST="test/plugin/test_e2e_kusto.rb"
+        working-directory: .
+        timeout-minutes: 15
+      - name: Publish Unit Test Results 
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        if: always()
+        with:
+          files: |
+            **/test-results.xml
+            **/rspec.xml
+            **/TEST-*.xml
