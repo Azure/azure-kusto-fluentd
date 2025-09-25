@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 require 'logger'
-require_relative '../kusto_constants'
+require 'fluent/plugin/kusto_constants'
 
 # AbstractTokenProvider defines the interface and shared logic for all token providers.
 # Enhanced with retry logic and better token expiry management to prevent timeout issues.
