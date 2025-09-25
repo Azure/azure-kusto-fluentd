@@ -44,12 +44,7 @@ class WorkloadIdentity < AbstractTokenProvider
       'client_assertion_type' => 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer',
       'client_assertion' => oidc_token
     )
-    http = Net::HTTP.new(uri.host, uri.port)
-    http.use_ssl = true
-    # Add timeouts to prevent hanging connections
-    http.open_timeout = 10
-    http.read_timeout = 30
-    http.write_timeout = 10
+    http = create_http_client(uri)
     res = http.request(req)
     raise "Failed to get access token: #{res.code} #{res.body}" unless res.is_a?(Net::HTTPSuccess)
 

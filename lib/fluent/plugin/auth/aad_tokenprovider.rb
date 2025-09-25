@@ -63,12 +63,7 @@ class AadTokenProvider < AbstractTokenProvider
     )
     while retries < max_retries
       begin
-        http = Net::HTTP.new(uri.host, uri.port)
-        http.use_ssl = (uri.scheme == 'https')
-        # Add timeouts to prevent hanging connections
-        http.open_timeout = 10
-        http.read_timeout = 30
-        http.write_timeout = 10
+        http = create_http_client(uri)
         request = Net::HTTP::Post.new(uri.request_uri, headers)
         request.body = form_data
 

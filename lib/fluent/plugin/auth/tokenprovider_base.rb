@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'logger'
+require_relative '../kusto_constants'
 
 # AbstractTokenProvider defines the interface and shared logic for all token providers.
 # Enhanced with retry logic and better token expiry management to prevent timeout issues.
@@ -20,18 +21,25 @@ class AbstractTokenProvider
       last_successful_refresh: nil
     }
     
-    # Simplified retry configuration
+    # Simplified retry configuration using constants
     @retry_config = {
-      max_retries: 3,
-      base_delay: 1,
-      backoff_multiplier: 2,
-      max_delay: 30  # Maximum delay between retries in seconds
+      max_retries: KustoConstants::Authentication::DEFAULT_MAX_RETRIES,
+      base_delay: KustoConstants::Authentication::DEFAULT_BASE_DELAY,
+      backoff_multiplier: KustoConstants::Authentication::DEFAULT_BACKOFF_MULTIPLIER,
+      max_delay: KustoConstants::Authentication::DEFAULT_MAX_DELAY
     }
     
     # Minimal health configuration for 12-hour reset
     @health_config = {
-      max_token_age: 43_200, # 12 hours - force refresh after this time
-      max_refresh_cycles: 100 # Force reset after too many refreshes
+      max_token_age: KustoConstants::HealthCheck::MAX_COMPONENT_AGE_SECONDS,
+      max_refresh_cycles: KustoConstants::HealthCheck::MAX_REFRESH_CYCLES
+    }
+    
+    # HTTP timeout configuration - consistent across all token providers
+    @http_config = {
+      open_timeout: KustoConstants::Authentication::HTTP_OPEN_TIMEOUT,
+      read_timeout: KustoConstants::Authentication::HTTP_READ_TIMEOUT,
+      write_timeout: KustoConstants::Authentication::HTTP_WRITE_TIMEOUT
     }
   end
 
@@ -52,21 +60,50 @@ class AbstractTokenProvider
         @logger.info("Refreshing token. Previous expiry: #{@token_state[:expiry_time]}")
         refresh_saved_token_with_retry
         @logger.info("New token expiry: #{@token_state[:expiry_time]}")
+      else
+        @logger.debug("Reusing existing token (expires at #{@token_state[:expiry_time]})")
       end
       @token_state[:access_token]
     end
   end
 
-  # Health check method
+  # Health check method - returns health status as hash
+  # Note: This method should be called from within a synchronized context
   def health_status
+    {
+      token_valid: !saved_token_need_refresh?,
+      token_expires_at: @token_state[:expiry_time],
+      consecutive_failures: @token_state[:consecutive_failures],
+      last_failure_time: @token_state[:last_failure_time],
+      refresh_in_progress: @token_state[:refresh_in_progress],
+      refresh_count: @token_state[:refresh_count],
+      last_successful_refresh: @token_state[:last_successful_refresh],
+      token_age_hours: @token_state[:creation_time] ? (Time.now - @token_state[:creation_time]) / 3600 : 0
+    }
+  end
+
+  # Thread-safe wrapper for health_status when called externally
+  def get_health_status
     @token_state[:token_details_mutex].synchronize do
-      {
-        token_valid: !saved_token_need_refresh?,
-        token_expires_at: @token_state[:expiry_time],
-        consecutive_failures: @token_state[:consecutive_failures],
-        last_failure_time: @token_state[:last_failure_time],
-        refresh_in_progress: @token_state[:refresh_in_progress]
-      }
+      health_status
+    end
+  end
+
+  # Log health status for operational visibility
+  def log_health_status(context = "")
+    status = health_status
+    context_prefix = context.empty? ? "" : "#{context}: "
+    
+    @logger.info("#{context_prefix}Token provider health - " \
+                "valid: #{status[:token_valid]}, " \
+                "expires_at: #{status[:token_expires_at]}, " \
+                "failures: #{status[:consecutive_failures]}, " \
+                "refresh_count: #{status[:refresh_count]}, " \
+                "age_hours: #{status[:token_age_hours].round(1)}")
+    
+    if status[:consecutive_failures] > 0
+      @logger.warn("#{context_prefix}Token provider has #{status[:consecutive_failures]} consecutive failures, " \
+                  "last failure: #{status[:last_failure_time]}")
     end
   end
 
@@ -89,9 +126,8 @@ class AbstractTokenProvider
       return true
     end
     
-    # Use 5-minute buffer instead of 1 second to prevent race conditions
-    buffer_time = 300 # 5 minutes
-    @token_state[:expiry_time] <= (Time.now + buffer_time)
+    # Use token expiry buffer from constants to prevent race conditions
+    @token_state[:expiry_time] <= (Time.now + KustoConstants::Authentication::TOKEN_EXPIRY_BUFFER_SECONDS)
   end
 
   def long_running_pod_health_check_needed?
@@ -123,6 +159,7 @@ class AbstractTokenProvider
   end
 
   def reset_token_state_for_long_running_pod
+    log_health_status("Before reset")
     @logger.info("Resetting token state for long-running pod health")
     
     @token_state[:access_token] = nil
@@ -133,8 +170,7 @@ class AbstractTokenProvider
     @token_state[:refresh_count] = 0
     @token_state[:last_successful_refresh] = nil
     
-    # Force garbage collection to prevent memory accumulation
-    GC.start
+    log_health_status("After reset")
   end
 
   def wait_for_refresh_completion
@@ -168,6 +204,9 @@ class AbstractTokenProvider
       @token_state[:last_successful_refresh] = Time.now
       
       @logger.info("Token refresh successful (cycle #{@token_state[:refresh_count]})")
+      
+      # Log health status after successful refresh for operational visibility
+      log_health_status("After successful refresh")
     ensure
       @token_state[:refresh_in_progress] = false
     end
@@ -210,15 +249,17 @@ class AbstractTokenProvider
   end
 
   def calculate_retry_delay(attempt)
-    # Exponential backoff with jitter
+    # Exponential backoff: base_delay * backoff_multiplier^(attempt-1)
+    # Example: 1s, 2s, 4s for base_delay=1, backoff_multiplier=2
     delay = @retry_config[:base_delay] * (@retry_config[:backoff_multiplier] ** (attempt - 1))
     delay = [@retry_config[:max_delay], delay].min
     
     # Add jitter to prevent thundering herd
+    # When many concurrent refreshes are happening, this will space them out better
     jitter = delay * 0.1
     delay += rand(-jitter..jitter)
     
-    [delay, 0.1].max # Minimum 0.1 second delay
+    [delay, KustoConstants::Authentication::MIN_RETRY_DELAY].max # Minimum retry delay from constants
   end
 
   def permanent_error?(exception)
@@ -245,10 +286,21 @@ class AbstractTokenProvider
   def get_token_expiry_time(expires_in_seconds)
     if expires_in_seconds.nil? || expires_in_seconds.to_i <= 0
       # Default to 55 minutes if expires_in is not provided or invalid
-      Time.now + 3300 
+      Time.now + KustoConstants::Authentication::DEFAULT_TOKEN_EXPIRY_SECONDS
     else
-      # Use 5-minute buffer instead of 1 second for better safety margin
-      Time.now + expires_in_seconds.to_i - 300
+      # Use buffer from constants for better safety margin
+      Time.now + expires_in_seconds.to_i - KustoConstants::Authentication::TOKEN_EXPIRY_BUFFER_SECONDS
     end
+  end
+
+  # Helper method to create HTTP client with consistent timeout configuration
+  # This prevents hanging connections and ensures consistent behavior across all token providers
+  def create_http_client(uri)
+    http = Net::HTTP.new(uri.host, uri.port)
+    http.use_ssl = (uri.scheme == 'https')
+    http.open_timeout = @http_config[:open_timeout]
+    http.read_timeout = @http_config[:read_timeout] 
+    http.write_timeout = @http_config[:write_timeout]
+    http
   end
 end

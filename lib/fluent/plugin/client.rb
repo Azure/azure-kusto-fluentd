@@ -120,9 +120,7 @@ class Client
     @client_state[:last_successful_fetch] = nil
     @client_state[:consecutive_failures] = 0
     
-    # Force garbage collection to prevent memory accumulation
-    GC.start
-  end
+      end
 
   def fetch_and_cache_resources
     # Fetch resources from Kusto and cache them
