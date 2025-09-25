@@ -24,7 +24,8 @@ class AbstractTokenProvider
     @retry_config = {
       max_retries: 3,
       base_delay: 1,
-      backoff_multiplier: 2
+      backoff_multiplier: 2,
+      max_delay: 30  # Maximum delay between retries in seconds
     }
     
     # Minimal health configuration for 12-hour reset
