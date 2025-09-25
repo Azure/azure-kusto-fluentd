@@ -25,6 +25,10 @@ def run_kusto_api_query(query, data_endpoint, token_provider, use_ingest_endpoin
 
   http = Net::HTTP.new(uri.host, uri.port)
   http.use_ssl = true
+  # Add timeouts to prevent hanging connections
+  http.open_timeout = 10
+  http.read_timeout = 30
+  http.write_timeout = 10
 
   headers = {
     'Authorization' => "Bearer #{access_token}",

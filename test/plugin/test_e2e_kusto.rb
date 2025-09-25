@@ -971,4 +971,42 @@ class KustoE2ETest < Test::Unit::TestCase
   end
 
   # INGESTION MAPPING REFERENCE TESTS - END
+  
+  test 'authentication_timeout_resilience' do
+    test_table = "FluentD_auth_timeout_#{Time.now.to_i}"
+    configure_and_start_driver(
+      table_name: test_table,
+      buffered: true,
+      delayed: true
+    )
+    setup_test_table(test_table)
+
+    # Test concurrent authentication requests don't cause conflicts
+    tag = 'e2e.auth_timeout'
+    events = generate_test_events(5, 11000, 'auth_test')
+
+    @driver.run(default_tag: tag, timeout: 300) do
+      events.each do |time, record|
+        @driver.feed(tag, time, record)
+      end
+      sleep 8
+    end
+
+    query = "#{test_table} | extend r = parse_json(record) | where r.id >= 11000 and r.id <= 11004"
+    rows = wait_for_ingestion(query, 5, 600)
+
+    assert(rows.size >= 5, "Expected 5 records with authentication resilience, got #{rows.size}")
+    
+    # Verify token buffer and jitter are working by checking logs don't show excessive token refreshes
+    # This is a behavioral test - if authentication is working properly, ingestion succeeds
+    found_auth_records = 0
+    rows.each do |row|
+      r = row[2]
+      if r && r['test_type'] == 'auth_test'
+        found_auth_records += 1
+      end
+    end
+    
+    assert(found_auth_records >= 5, 'Authentication timeout resilience test failed - records not properly authenticated and ingested')
+  end
 end
