@@ -52,7 +52,7 @@ class AadTokenProvider < AbstractTokenProvider
 
   def post_token_request
     headers = header
-    max_retries = 10
+    max_retries = 3  # Reduced from 10 to prevent rate limiting cascade
     retries = 0
     uri = URI.parse(@token_request_uri)
     form_data = URI.encode_www_form(
@@ -63,8 +63,7 @@ class AadTokenProvider < AbstractTokenProvider
     )
     while retries < max_retries
       begin
-        http = Net::HTTP.new(uri.host, uri.port)
-        http.use_ssl = (uri.scheme == 'https')
+        http = create_http_client(uri)
         request = Net::HTTP::Post.new(uri.request_uri, headers)
         request.body = form_data
 

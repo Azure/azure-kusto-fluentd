@@ -73,7 +73,7 @@ class ManagedIdentityTokenProvider < AbstractTokenProvider
     uri = URI.parse(@token_acquire_url)
     while retries < max_retries
       begin
-        http = Net::HTTP.new(uri.host, uri.port)
+        http = create_http_client(uri)
         request = Net::HTTP::Get.new(uri.request_uri, headers)
         response = http.request(request)
         return JSON.parse(response.body) if response.code.to_i == 200

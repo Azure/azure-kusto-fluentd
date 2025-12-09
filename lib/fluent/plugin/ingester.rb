@@ -25,7 +25,6 @@ class Ingester
   def initialize(outconfiguration)
     # Initialize Ingester with configuration and resources
     @client = self.class.client(outconfiguration)
-    @resources = @client.resources
     @logger = begin
       outconfiguration.logger
     rescue StandardError
@@ -34,8 +33,19 @@ class Ingester
   end
 
   def self.client(outconfiguration)
-    # Cache and return a Client instance
-    self.client_cache ||= Client.new(outconfiguration)
+    # Thread-safe singleton client cache with basic validation
+    return self.client_cache if self.client_cache
+
+    # Double-checked locking pattern for thread safety
+    @client_mutex ||= Mutex.new
+    @client_mutex.synchronize do
+      self.client_cache ||= Client.new(outconfiguration)
+    end
+  end
+
+  # CRITICAL FIX: Dynamic resource access instead of stale cached reference
+  def resources
+    @client.resources
   end
 
   def build_uri(container_sas_uri, name)
@@ -56,7 +66,8 @@ class Ingester
     request['x-ms-blob-type'] = 'BlockBlob'
     request['Content-Length'] = blob_size.to_s
 
-    response = Net::HTTP.start(uri.hostname, uri.port, use_ssl: uri.scheme == 'https') do |http|
+    response = Net::HTTP.start(uri.hostname, uri.port, use_ssl: uri.scheme == 'https',
+                               open_timeout: 10, read_timeout: 30, write_timeout: 10) do |http|
       http.request(request)
     end
 
@@ -111,7 +122,8 @@ class Ingester
     request = Net::HTTP::Post.new(post_uri)
     request['Content-Type'] = 'application/xml'
     request.body = "<QueueMessage><MessageText>#{encoded_message}</MessageText></QueueMessage>"
-    response = Net::HTTP.start(post_uri.hostname, post_uri.port, use_ssl: post_uri.scheme == 'https') do |http|
+    response = Net::HTTP.start(post_uri.hostname, post_uri.port, use_ssl: post_uri.scheme == 'https',
+                               open_timeout: 10, read_timeout: 30, write_timeout: 10) do |http|
       http.request(request)
     end
     {
@@ -124,10 +136,12 @@ class Ingester
 
   def upload_data_to_blob_and_queue(raw_data, blob_name, db, table_name, compression_enabled = true, mapping_reference = nil)
     # Upload data to blob and send ingestion message to queue
-    blob_uri, blob_size_bytes = upload_to_blob(@resources[:blob_sas_uri], raw_data, blob_name)
-    message = prepare_ingestion_message2(db, table_name, blob_uri, blob_size_bytes, @resources[:identity_token],
+    # Use dynamic resources method instead of stale cached reference
+    current_resources = resources
+    blob_uri, blob_size_bytes = upload_to_blob(current_resources[:blob_sas_uri], raw_data, blob_name)
+    message = prepare_ingestion_message2(db, table_name, blob_uri, blob_size_bytes, current_resources[:identity_token],
                                          compression_enabled, mapping_reference)
-    post_message_to_queue_http(@resources[:queue_sas_uri], message)
+    post_message_to_queue_http(current_resources[:queue_sas_uri], message)
     { blob_uri: blob_uri, blob_size_bytes: blob_size_bytes }
   end
 

@@ -8,6 +8,7 @@ require 'uri'
 require 'json'
 require 'securerandom'
 require 'base64'
+require_relative 'kusto_version'
 
 def to_ingest_endpoint(data_endpoint)
   # Convert a Kusto data endpoint to its corresponding ingest endpoint
@@ -24,12 +25,18 @@ def run_kusto_api_query(query, data_endpoint, token_provider, use_ingest_endpoin
 
   http = Net::HTTP.new(uri.host, uri.port)
   http.use_ssl = true
+  # Add timeouts to prevent hanging connections
+  http.open_timeout = 10
+  http.read_timeout = 30
+  http.write_timeout = 10
 
   headers = {
     'Authorization' => "Bearer #{access_token}",
     'Content-Type' => 'application/json',
     'Accept' => 'application/json',
-    'x-ms-client-version' => 'Kusto.FluentD:1.0.0'
+    'x-ms-client-version' => "Kusto.FluentD:#{Fluent::Plugin::Kusto::VERSION}",
+    'x-ms-app' => 'Kusto.FluentD',
+    'x-ms-user' => 'Kusto.FluentD'
   }
 
   body_hash = { csl: query }
