@@ -26,6 +26,19 @@ class Client
     @resources_expiry_time = nil
     @outconfiguration = outconfiguration
     @token_provider = create_token_provider(outconfiguration)
+    
+    # Minimal state tracking for 12-hour reset
+    @client_state = {
+      creation_time: Time.now,
+      resource_fetch_count: 0,
+      last_successful_fetch: nil
+    }
+    
+    # Simplified health configuration
+    @health_config = {
+      max_client_age: 43_200, # 12 hours - force reset after this time
+      max_fetch_cycles: 200 # Force reset after too many fetch cycles
+    }
   end
 
   def resources
@@ -34,6 +47,17 @@ class Client
 
     fetch_and_cache_resources
     @cached_resources
+  end
+
+  # Minimal health status for operational visibility
+  def health_status
+    {
+      resources_cached: !@cached_resources.nil?,
+      cache_expires_at: @resources_expiry_time,
+      fetch_cycles: @client_state[:resource_fetch_count],
+      pod_age_hours: (Time.now - @client_state[:creation_time]) / 3600,
+      last_successful_fetch: @client_state[:last_successful_fetch]
+    }
   end
 
   attr_reader :blob_sas_uri, :queue_sas_uri, :identity_token, :logger, :blob_rows, :data_endpoint, :token_provider
@@ -48,9 +72,55 @@ class Client
   end
 
   def resources_cached?
+    # Check for long-running pod health issues first
+    if long_running_pod_health_check_needed?
+      @logger.warn("Long-running pod health issue detected, forcing resource refresh")
+      return false
+    end
+    
     # Check if resources are cached and not expired
     @cached_resources && @resources_expiry_time && @resources_expiry_time > Time.now
   end
+
+  def long_running_pod_health_check_needed?
+    current_time = Time.now
+    
+    # Check if client is too old (12+ hours) - force reset to prevent staleness
+    if @client_state[:creation_time] && 
+       (current_time - @client_state[:creation_time]) > @health_config[:max_client_age]
+      @logger.warn("Client is #{(current_time - @client_state[:creation_time]) / 3600} hours old, forcing reset")
+      reset_client_state_for_long_running_pod
+      return true
+    end
+    
+    # Check if too many fetch cycles (potential state corruption)
+    if @client_state[:resource_fetch_count] > @health_config[:max_fetch_cycles]
+      @logger.warn("Client has #{@client_state[:resource_fetch_count]} fetch cycles, resetting state")
+      reset_client_state_for_long_running_pod
+      return true
+    end
+    
+    # Check if no successful fetch for too long (6 hours)
+    if @client_state[:last_successful_fetch] &&
+       (current_time - @client_state[:last_successful_fetch]) > 21_600
+      @logger.warn("No successful resource fetch for #{(current_time - @client_state[:last_successful_fetch]) / 3600} hours")
+      return true
+    end
+    
+    false
+  end
+
+  def reset_client_state_for_long_running_pod
+    @logger.info("Resetting client state for long-running pod health")
+    
+    @cached_resources = nil
+    @resources_expiry_time = nil
+    @client_state[:creation_time] = Time.now
+    @client_state[:resource_fetch_count] = 0
+    @client_state[:last_successful_fetch] = nil
+    @client_state[:consecutive_failures] = 0
+    
+      end
 
   def fetch_and_cache_resources
     # Fetch resources from Kusto and cache them
@@ -137,7 +207,18 @@ class Client
       queue_sas_uri: queue_sas_uri,
       identity_token: identity_token
     }
-    @resources_expiry_time = Time.now + 21_600 # Cache for 6 hours
+    
+    # Add jitter (±30 minutes) to prevent thundering herd
+    base_ttl = 21_600 # 6 hours
+    jitter = rand(-1800..1800) # ±30 minutes
+    @resources_expiry_time = Time.now + base_ttl + jitter
+    
+    # Update client state tracking
+    @client_state[:resource_fetch_count] += 1
+    @client_state[:last_successful_fetch] = Time.now
+    @client_state[:consecutive_failures] = 0
+    
+    @logger.info("Resources cached with jitter: #{jitter / 60} minutes (expires at #{@resources_expiry_time}) - fetch cycle #{@client_state[:resource_fetch_count]}")
   end
 
   def validate_kusto_resource_rows(blob_rows, aad_token_rows)

@@ -34,7 +34,7 @@ class WorkloadIdentity < AbstractTokenProvider
   end
 
   def acquire_workload_identity_token
-    oidc_token = File.read(@token_file).strip
+    oidc_token = read_token_file_safely
     uri = URI.parse(format(AZURE_OAUTH2_TOKEN_ENDPOINT, tenant_id: @tenant_id))
     req = Net::HTTP::Post.new(uri)
     req.set_form_data(
@@ -44,11 +44,26 @@ class WorkloadIdentity < AbstractTokenProvider
       'client_assertion_type' => 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer',
       'client_assertion' => oidc_token
     )
-    http = Net::HTTP.new(uri.host, uri.port)
-    http.use_ssl = true
+    http = create_http_client(uri)
     res = http.request(req)
     raise "Failed to get access token: #{res.code} #{res.body}" unless res.is_a?(Net::HTTPSuccess)
 
     JSON.parse(res.body)
+  end
+
+  def read_token_file_safely
+    max_attempts = 3
+    max_attempts.times do |attempt|
+      begin
+        # Safe file reading with corruption detection
+        token = File.read(@token_file).strip
+        raise "Empty or invalid token file" if token.empty? || token.length < 10
+        return token
+      rescue => e
+        @logger.warn("Token file read attempt #{attempt + 1}/#{max_attempts} failed: #{e.message}")
+        raise e if attempt == max_attempts - 1
+        sleep(0.1 * (2 ** attempt))  # Exponential backoff: 0.1s, 0.2s, 0.4s
+      end
+    end
   end
 end

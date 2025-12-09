@@ -2,10 +2,11 @@
 
 lib = File.expand_path('lib', __dir__)
 $LOAD_PATH.unshift(lib) unless $LOAD_PATH.include?(lib)
+require 'fluent/plugin/kusto_version'
 
 Gem::Specification.new do |spec|
   spec.name          = 'fluent-plugin-kusto'
-  spec.version       = '0.0.2.beta'
+  spec.version       = Fluent::Plugin::Kusto::VERSION
   spec.authors       = ['Komal Rani', 'Kusto OSS IDC Team']
   spec.email         = ['t-komalrani+microsoft@microsoft.com', 'kustoossidc@microsoft.com']
 
