@@ -3,7 +3,7 @@
 module Fluent
   module Plugin
     module Kusto
-      VERSION = '0.0.3.beta'
+      VERSION = '1.0.0'
     end
   end
 end
