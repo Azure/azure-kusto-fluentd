@@ -42,7 +42,7 @@ This plugin allows you to send data from Fluentd to Azure Data Explorer (Kusto) 
 ### RubyGems
 
 ```sh
-$ gem install fluent-plugin-kusto --pre
+$ gem install fluent-plugin-kusto 
 ```
 
 ### Bundler
@@ -50,10 +50,8 @@ $ gem install fluent-plugin-kusto --pre
 Add the following line to your Gemfile:
 
 ```ruby
-gem "fluent-plugin-kusto", "~> 0.0.2.beta"
+gem "fluent-plugin-kusto", "~> 1.0.0"
 ```
-
-**Note:** This is a beta release. Use the `--pre` flag with gem install or specify the beta version in your Gemfile.
 
 And then execute:
 
