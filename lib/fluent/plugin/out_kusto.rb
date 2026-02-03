@@ -63,6 +63,7 @@ module Fluent
         validate_buffer_config(conf)
         validate_delayed_config
         validate_required_params
+        @table_name_template = table_name
       end
 
       def start
@@ -70,7 +71,7 @@ module Fluent
         super
         setup_outconfiguration
         setup_ingester_and_logger
-        @table_name = @outconfiguration&.table_name
+        @table_name_template = @outconfiguration&.table_name
         @database_name = @outconfiguration&.database_name
         @shutdown_called = false
         @deferred_threads = []
@@ -160,12 +161,13 @@ module Fluent
       end
 
       def process(tag, es)
+        resolved_table = resolve_table_name(tag)
         es.each do |time, record|
           formatted = format(tag, time, record).encode('UTF-8', invalid: :replace, undef: :replace, replace: '_')
           safe_tag = tag.to_s.encode('UTF-8', invalid: :replace, undef: :replace, replace: '_').gsub(/[^0-9A-Za-z.-]/,
                                                                                                      '_')
           blob_name = "fluentd_event_#{safe_tag}.json"
-          @ingester.upload_data_to_blob_and_queue(formatted, blob_name, @database_name, @table_name,
+          @ingester.upload_data_to_blob_and_queue(formatted, blob_name, @database_name, resolved_table,
                                                   compression_enabled, @ingestion_mapping_reference)
         rescue StandardError => e
           @logger&.error("Failed to ingest event to Kusto: #{e}\nEvent skipped: #{record.inspect}\n#{e.backtrace.join("\n")}")
@@ -178,6 +180,7 @@ module Fluent
         worker_id = Fluent::Engine.worker_id
         raw_data = chunk.read
         tag = extract_tag_from_metadata(chunk.metadata)
+        resolved_table = resolve_table_name(tag)
         safe_tag = tag.to_s.encode('UTF-8', invalid: :replace, undef: :replace, replace: '_').gsub(/[^0-9A-Za-z.-]/,
                                                                                                    '_')
         unique_id = chunk.unique_id
@@ -185,7 +188,7 @@ module Fluent
         blob_name = "fluentd_event_worker#{worker_id}_#{safe_tag}_#{dump_unique_id_hex(unique_id)}#{ext}"
         data_to_upload = compression_enabled ? compress_data(raw_data) : raw_data
         begin
-          @ingester.upload_data_to_blob_and_queue(data_to_upload, blob_name, @database_name, @table_name,
+          @ingester.upload_data_to_blob_and_queue(data_to_upload, blob_name, @database_name, resolved_table,
                                                   compression_enabled, @ingestion_mapping_reference)
         rescue StandardError => e
           handle_kusto_error(e, unique_id)
@@ -208,6 +211,7 @@ module Fluent
       def try_write(chunk)
         @deferred_threads ||= []
         tag = extract_tag_from_metadata(chunk.metadata)
+        resolved_table = resolve_table_name(tag)
         safe_tag = tag.to_s.encode('UTF-8', invalid: :replace, undef: :replace, replace: '_').gsub(/[^0-9A-Za-z.-]/,
                                                                                                    '_')
         chunk_id = dump_unique_id_hex(chunk.unique_id)
@@ -225,7 +229,7 @@ module Fluent
         row_count = records.size
         data_to_upload = compression_enabled ? compress_data(updated_raw_data) : updated_raw_data
         begin
-          @ingester.upload_data_to_blob_and_queue(data_to_upload, blob_name, @database_name, @table_name,
+          @ingester.upload_data_to_blob_and_queue(data_to_upload, blob_name, @database_name, resolved_table,
                                                   compression_enabled, @ingestion_mapping_reference)
           if @shutdown_called || !@delayed
             commit_write(chunk.unique_id)
@@ -287,9 +291,10 @@ module Fluent
 
       def check_data_on_server(chunk_id, row_count)
         # Query Kusto to verify chunk ingestion
+        # Note: For dynamic table names, this uses the template name which may not work with placeholders
         begin
           # Sanitize inputs to prevent injection attacks
-          safe_table_name = @table_name.to_s.gsub(/[^a-zA-Z0-9_]/, '')
+          safe_table_name = @table_name_template.to_s.gsub(/[^a-zA-Z0-9_${}]/, '')
           safe_chunk_id = chunk_id.to_s.gsub(/[^a-zA-Z0-9_-]/, '')
           query = "#{safe_table_name} | extend record_dynamic = parse_json(record) | where record_dynamic.chunk_id == '#{safe_chunk_id}' | count"
           result = run_kusto_api_query(query, @outconfiguration.kusto_endpoint, @ingester.token_provider,
@@ -338,6 +343,40 @@ module Fluent
         
         @ingester.shutdown if @ingester.respond_to?(:shutdown)
         super
+      end
+
+      def resolve_table_name(tag)
+        # Resolve table name from template with placeholders
+        return @table_name_template if @table_name_template.nil? || @table_name_template.empty?
+        return @table_name_template unless @table_name_template.include?('${')
+
+        tag_str = tag.to_s
+        tag_parts = tag_str.split('.')
+        result = @table_name_template.dup
+
+        # Replace ${tag} with full tag (dots converted to underscores)
+        result = result.gsub('${tag}', tag_str.gsub('.', '_'))
+
+        # Replace ${tag_parts[N]} with Nth part
+        result = result.gsub(/\$\{tag_parts\[(\d+)\]\}/) do
+          index = ::Regexp.last_match(1).to_i
+          tag_parts[index] || ''
+        end
+
+        # Replace ${tag_prefix[N]} with first N parts
+        result = result.gsub(/\$\{tag_prefix\[(\d+)\]\}/) do
+          count = ::Regexp.last_match(1).to_i
+          tag_parts.take(count).join('_')
+        end
+
+        # Replace ${tag_suffix[N]} with last N parts
+        result = result.gsub(/\$\{tag_suffix\[(\d+)\]\}/) do
+          count = ::Regexp.last_match(1).to_i
+          tag_parts.last(count).join('_')
+        end
+
+        # Sanitize: replace special characters with underscores
+        result.gsub(/[^0-9A-Za-z_]/, '_')
       end
 
       private

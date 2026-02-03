@@ -50,7 +50,7 @@ $ gem install fluent-plugin-kusto
 Add the following line to your Gemfile:
 
 ```ruby
-gem "fluent-plugin-kusto", "~> 1.0.0"
+gem "fluent-plugin-kusto", "~> 1.1.0.beta"
 ```
 
 And then execute:
@@ -242,6 +242,54 @@ This approach provides flexibility to transform the generic 3-column format into
 | `azure_cloud` | Azure cloud environment: `AzureCloud`, `AzureChinaCloud`, `AzureUSGovernmentCloud`, `AzureGermanCloud` | `AzureCloud` |
 | `logger_path` | File path for plugin logs. If not set, logs to stdout. | stdout |
 
+## Dynamic Table Name Resolution
+
+The plugin supports dynamic table name resolution using placeholders in the `table_name` parameter. This allows you to route logs to different tables based on the Fluentd tag.
+
+### Supported Placeholders
+
+| Placeholder | Description | Example |
+|------------|-------------|---------|
+| `${tag}` | Full tag name (dots → underscores) | `app.orders.created` → `app_orders_created` |
+| `${tag_parts[N]}` | Nth part of tag (0-indexed) | `${tag_parts[1]}` with `app.orders.created` → `orders` |
+| `${tag_prefix[N]}` | First N parts joined | `${tag_prefix[2]}` with `app.orders.created` → `app_orders` |
+| `${tag_suffix[N]}` | Last N parts joined | `${tag_suffix[2]}` with `app.orders.created` → `orders_created` |
+
+### Usage Examples
+
+**Route by tag part:**
+```conf
+<match custom.**>
+  @type kusto
+  table_name ${tag_parts[1]}
+  # custom.orders.created → orders table
+  # custom.users.signup → users table
+</match>
+```
+
+**Mixed static and dynamic:**
+```conf
+<match app.**>
+  @type kusto
+  table_name logs_${tag_parts[1]}
+  # app.orders → logs_orders table
+</match>
+```
+
+**Multiple placeholders:**
+```conf
+<match **>
+  @type kusto
+  table_name ${tag_parts[0]}_${tag_parts[1]}_events
+  # production.api.requests → production_api_events table
+</match>
+```
+
+**Notes:**
+- All special characters are automatically converted to underscores
+- Static table names (without placeholders) continue to work as before
+- Placeholders are resolved at ingestion time based on the event tag
+
 ### Buffer Configuration (buffered mode only)
 | Key | Description | Default |
 | --- | ----------- | ------- |
@@ -391,7 +439,13 @@ This diagram shows the main components and data flow for the plugin, including c
 
 ## Release Notes
 
-### v0.0.2.beta (Latest)
+### v1.1.0-beta (Latest)
+- **Dynamic table name resolution** - Added support for placeholder-based table name routing using `${tag}`, `${tag_parts[N]}`, `${tag_prefix[N]}`, and `${tag_suffix[N]}`
+- **Enhanced flexibility** - Route logs to different tables based on Fluentd tags without code changes
+- **Backwards compatible** - Static table names continue to work as before
+
+### v1.0.0
+- **Production-ready release** - Stable version with comprehensive testing
 - **Fixed critical authentication initialization bugs** - Resolved `NameError` in ManagedIdentityTokenProvider and WorkloadIdentityTokenProvider
 - **Added comprehensive unit test coverage** - New test suites for authentication providers with 14 test cases and 45+ assertions
 - **Improved E2E test reliability** - Enhanced timeout configurations to handle Azure Kusto ingestion delays (480s-600s timeouts)
