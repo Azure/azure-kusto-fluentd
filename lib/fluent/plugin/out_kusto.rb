@@ -347,10 +347,21 @@ module Fluent
 
       def resolve_table_name(tag)
         # Resolve table name from template with placeholders
-        return @table_name_template if @table_name_template.nil? || @table_name_template.empty?
+        if @table_name_template.nil? || @table_name_template.empty?
+          @logger&.error('Table name template is nil or empty')
+          raise Fluent::ConfigError, 'table_name must be set and non-empty'
+        end
+        
         return @table_name_template unless @table_name_template.include?('${')
 
         tag_str = tag.to_s
+        
+        # Validate tag is not empty when using placeholders
+        if tag_str.empty?
+          @logger&.warn("Tag is empty when resolving dynamic table name, using template as fallback: #{@table_name_template}")
+          return @table_name_template.gsub(/\$\{[^}]+\}/, 'unknown').gsub(/[^0-9A-Za-z_]/, '_')
+        end
+        
         tag_parts = tag_str.split('.')
         result = @table_name_template.dup
 
@@ -360,23 +371,33 @@ module Fluent
         # Replace ${tag_parts[N]} with Nth part
         result = result.gsub(/\$\{tag_parts\[(\d+)\]\}/) do
           index = ::Regexp.last_match(1).to_i
-          tag_parts[index] || ''
+          tag_parts[index] || 'unknown'
         end
 
         # Replace ${tag_prefix[N]} with first N parts
         result = result.gsub(/\$\{tag_prefix\[(\d+)\]\}/) do
           count = ::Regexp.last_match(1).to_i
-          tag_parts.take(count).join('_')
+          parts = tag_parts.take(count)
+          parts.empty? ? 'unknown' : parts.join('_')
         end
 
         # Replace ${tag_suffix[N]} with last N parts
         result = result.gsub(/\$\{tag_suffix\[(\d+)\]\}/) do
           count = ::Regexp.last_match(1).to_i
-          tag_parts.last(count).join('_')
+          parts = tag_parts.last(count)
+          parts.empty? ? 'unknown' : parts.join('_')
         end
 
-        # Sanitize: replace special characters with underscores
-        result.gsub(/[^0-9A-Za-z_]/, '_')
+        # Sanitize: replace special characters with underscores and collapse consecutive underscores
+        sanitized = result.gsub(/[^0-9A-Za-z_]/, '_').gsub(/_+/, '_')
+        
+        # Final validation: ensure we don't have an empty table name
+        if sanitized.empty? || sanitized == '_'
+          @logger&.error("Resolved table name is empty or invalid for tag '#{tag}' with template '#{@table_name_template}'")
+          raise Fluent::ConfigError, "table_name resolved to empty or invalid value for tag '#{tag}'"
+        end
+        
+        sanitized
       end
 
       private

@@ -287,8 +287,14 @@ The plugin supports dynamic table name resolution using placeholders in the `tab
 
 **Notes:**
 - All special characters are automatically converted to underscores
+- Consecutive underscores are collapsed to single underscores
 - Static table names (without placeholders) continue to work as before
 - Placeholders are resolved at ingestion time based on the event tag
+
+**Important Limitations:**
+- ⚠️ **Delayed commits not supported with dynamic table names**: The `delayed` commit feature is currently incompatible with placeholder-based table names. When using dynamic table names, ensure `delayed` is set to `false` (the default).
+- ⚠️ **Validate placeholder patterns**: Ensure your placeholder patterns always resolve to non-empty, valid table names for all expected tags. For example, accessing a tag part index that doesn't exist (e.g., `${tag_parts[5]}` for tag `app.orders`) will resolve to `"unknown"` as a fallback.
+- ⚠️ **Empty or nil tags**: If a tag is empty or nil when using placeholders, the plugin will use `"unknown"` as a fallback to prevent ingestion failures.
 
 ### Buffer Configuration (buffered mode only)
 | Key | Description | Default |
