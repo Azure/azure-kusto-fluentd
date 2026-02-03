@@ -50,7 +50,7 @@ $ gem install fluent-plugin-kusto
 Add the following line to your Gemfile:
 
 ```ruby
-gem "fluent-plugin-kusto", "~> 1.1.0.beta"
+gem "fluent-plugin-kusto", "~> 1.1.1.beta"
 ```
 
 And then execute:
@@ -445,7 +445,7 @@ This diagram shows the main components and data flow for the plugin, including c
 
 ## Release Notes
 
-### v1.1.0.beta (Latest)
+### v1.1.1.beta (Latest)
 - **Dynamic table name resolution** - Added support for placeholder-based table name routing using `${tag}`, `${tag_parts[N]}`, `${tag_prefix[N]}`, and `${tag_suffix[N]}`
 - **Enhanced flexibility** - Route logs to different tables based on Fluentd tags without code changes
 - **Backwards compatible** - Static table names continue to work as before
