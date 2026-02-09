@@ -88,10 +88,10 @@ class KustoOutputResolveTableNameTest < Test::Unit::TestCase
     assert_equal 'created', result
   end
 
-  test 'resolve_table_name returns empty string for out-of-bounds tag_parts index' do
+  test 'resolve_table_name returns unknown for out-of-bounds tag_parts index' do
     driver = create_driver('${tag_parts[5]}')
     result = driver.instance.send(:resolve_table_name, 'app.orders')
-    assert_equal '', result
+    assert_equal 'unknown', result
   end
 
   test 'resolve_table_name replaces ${tag_prefix[1]} with first part' do
@@ -142,22 +142,22 @@ class KustoOutputResolveTableNameTest < Test::Unit::TestCase
     assert_equal 'singletag', result
   end
 
-  test 'resolve_table_name returns empty for tag_parts on single-part tag with index > 0' do
+  test 'resolve_table_name returns unknown for tag_parts on single-part tag with index > 0' do
     driver = create_driver('${tag_parts[1]}')
     result = driver.instance.send(:resolve_table_name, 'singletag')
-    assert_equal '', result
+    assert_equal 'unknown', result
   end
 
-  test 'resolve_table_name handles empty tag' do
+  test 'resolve_table_name handles empty tag with fallback to unknown' do
     driver = create_driver('${tag}')
     result = driver.instance.send(:resolve_table_name, '')
-    assert_equal '', result
+    assert_equal 'unknown', result
   end
 
-  test 'resolve_table_name handles nil tag' do
+  test 'resolve_table_name handles nil tag with fallback to unknown' do
     driver = create_driver('${tag}')
     result = driver.instance.send(:resolve_table_name, nil)
-    assert_equal '', result
+    assert_equal 'unknown', result
   end
 
   # ==========================================
@@ -273,7 +273,7 @@ class KustoOutputResolveTableNameTest < Test::Unit::TestCase
   # Tests for try_write with dynamic table names
   # ==========================================
 
-  test 'try_write uses resolved table name' do
+  test 'try_write uses resolved table name (non-delayed)' do
     driver = create_driver('${tag_parts[1]}')
     driver.instance.instance_variable_set(:@delayed, false)
     driver.instance.instance_variable_set(:@shutdown_called, false)
@@ -294,6 +294,35 @@ class KustoOutputResolveTableNameTest < Test::Unit::TestCase
       tag: 'custom.orders.events'
     )
     assert_nothing_raised { driver.instance.try_write(chunk) }
+  end
+
+  test 'try_write with delayed commit passes resolved table name to check_data_on_server' do
+    driver = create_driver('${tag_parts[1]}')
+    driver.instance.instance_variable_set(:@delayed, true)
+    driver.instance.instance_variable_set(:@shutdown_called, false)
+    driver.instance.instance_variable_set(:@deferred_threads, [])
+    
+    ingester_mock = mock
+    ingester_mock.expects(:upload_data_to_blob_and_queue).once.with do |_data, _blob_name, db, table, _compression, _mapping|
+      assert_equal 'orders', table
+      true
+    end
+    
+    set_mocks(driver, ingester: ingester_mock, logger: logger_stub)
+    driver.instance.stubs(:commit_write)
+    
+    # Verify check_data_on_server receives the resolved table name, not the template
+    driver.instance.expects(:check_data_on_server).with do |chunk_id, row_count, resolved_table|
+      assert_equal 'orders', resolved_table, 'check_data_on_server should receive resolved table name, not template'
+      true
+    end.returns(true)
+    
+    chunk = chunk_stub(
+      data: '{"tag":"custom.orders","timestamp":"2024-01-01","record":{"key":"value"}}',
+      tag: 'custom.orders.events'
+    )
+    assert_nothing_raised { driver.instance.try_write(chunk) }
+    sleep 1.5 # Give deferred thread time to execute
   end
 
   # ==========================================

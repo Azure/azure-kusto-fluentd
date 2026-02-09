@@ -50,7 +50,7 @@ $ gem install fluent-plugin-kusto
 Add the following line to your Gemfile:
 
 ```ruby
-gem "fluent-plugin-kusto", "~> 1.1.1.beta"
+gem "fluent-plugin-kusto", "~> 1.1.2"
 ```
 
 And then execute:
@@ -291,10 +291,10 @@ The plugin supports dynamic table name resolution using placeholders in the `tab
 - Static table names (without placeholders) continue to work as before
 - Placeholders are resolved at ingestion time based on the event tag
 
-**Important Limitations:**
-- ⚠️ **Delayed commits not supported with dynamic table names**: The `delayed` commit feature is currently incompatible with placeholder-based table names. When using dynamic table names, ensure `delayed` is set to `false` (the default).
+**Important Notes:**
 - ⚠️ **Validate placeholder patterns**: Ensure your placeholder patterns always resolve to non-empty, valid table names for all expected tags. For example, accessing a tag part index that doesn't exist (e.g., `${tag_parts[5]}` for tag `app.orders`) will resolve to `"unknown"` as a fallback.
 - ⚠️ **Empty or nil tags**: If a tag is empty or nil when using placeholders, the plugin will use `"unknown"` as a fallback to prevent ingestion failures.
+- ✅ **Delayed commits supported**: Dynamic table names are fully compatible with the `delayed` commit feature. The resolved table name is correctly passed through to deferred commit verification queries.
 
 ### Buffer Configuration (buffered mode only)
 | Key | Description | Default |
@@ -445,7 +445,12 @@ This diagram shows the main components and data flow for the plugin, including c
 
 ## Release Notes
 
-### v1.1.1.beta (Latest)
+### v1.1.2 (Latest)
+- **Fixed deferred commit with dynamic table names** - Resolved table names are now correctly passed through to `check_data_on_server`, fixing broken ingestion verification when using placeholder-based table names with `delayed: true`
+- **Improved edge case handling** - Out-of-bounds tag part indices and nil/empty tags now correctly resolve to `"unknown"` fallback instead of empty strings
+- **Added regression tests** - New test coverage for deferred commit + dynamic table name combination
+
+### v1.1.1.beta
 - **Dynamic table name resolution** - Added support for placeholder-based table name routing using `${tag}`, `${tag_parts[N]}`, `${tag_prefix[N]}`, and `${tag_suffix[N]}`
 - **Enhanced flexibility** - Route logs to different tables based on Fluentd tags without code changes
 - **Backwards compatible** - Static table names continue to work as before

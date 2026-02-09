@@ -239,7 +239,7 @@ module Fluent
               @logger&.info("Immediate commit for chunk_id=#{chunk_id} (delayed=false)")
             end
           else
-            thread = start_deferred_commit_thread(chunk_id, chunk, row_count)
+            thread = start_deferred_commit_thread(chunk_id, chunk, row_count, resolved_table)
             @deferred_threads << thread if thread
           end
         rescue StandardError => e
@@ -247,7 +247,7 @@ module Fluent
         end
       end
 
-      def start_deferred_commit_thread(chunk_id, chunk, row_count)
+      def start_deferred_commit_thread(chunk_id, chunk, row_count, resolved_table)
         # Start a thread to commit chunk after verifying ingestion
         return nil if @shutdown_called
 
@@ -262,7 +262,7 @@ module Fluent
             
             attempts += 1
             
-            if check_data_on_server(chunk_id, row_count)
+            if check_data_on_server(chunk_id, row_count, resolved_table)
               commit_write(chunk.unique_id)
               @logger&.info("Successfully committed chunk_id=#{chunk_id} after #{attempts} attempts")
               break
@@ -289,12 +289,11 @@ module Fluent
         end
       end
 
-      def check_data_on_server(chunk_id, row_count)
+      def check_data_on_server(chunk_id, row_count, resolved_table)
         # Query Kusto to verify chunk ingestion
-        # Note: For dynamic table names, this uses the template name which may not work with placeholders
         begin
           # Sanitize inputs to prevent injection attacks
-          safe_table_name = @table_name_template.to_s.gsub(/[^a-zA-Z0-9_${}]/, '')
+          safe_table_name = resolved_table.to_s.gsub(/[^a-zA-Z0-9_]/, '')
           safe_chunk_id = chunk_id.to_s.gsub(/[^a-zA-Z0-9_-]/, '')
           query = "#{safe_table_name} | extend record_dynamic = parse_json(record) | where record_dynamic.chunk_id == '#{safe_chunk_id}' | count"
           result = run_kusto_api_query(query, @outconfiguration.kusto_endpoint, @ingester.token_provider,
