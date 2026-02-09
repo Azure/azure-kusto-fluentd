@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    fluent-plugin-kusto (1.0.0)
+    fluent-plugin-kusto (1.1.2)
       dotenv (~> 2.0)
       fluentd (>= 1.0, < 2)
 

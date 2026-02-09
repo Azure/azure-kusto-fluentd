@@ -300,7 +300,7 @@ class KustoOutputStartTest < Test::Unit::TestCase
     assert_nil driver.instance.instance_variable_get(:@logger)
   end
 
-  test 'start raises error if OutputConfiguration returns nil for required fields' do
+  test 'start sets nil table_name_template and database_name when OutputConfiguration returns nil' do
     output_config_mock = mock
     output_config_mock.stubs(:logger).returns(Logger.new(nil))
     output_config_mock.stubs(:table_name).returns(nil)
@@ -312,7 +312,7 @@ class KustoOutputStartTest < Test::Unit::TestCase
     Object.const_set(:Ingester, TestIngesterMock1)
     driver = Fluent::Test::Driver::Output.new(Fluent::Plugin::KustoOutput).configure(@conf)
     driver.instance.start
-    assert_nil driver.instance.instance_variable_get(:@table_name)
+    assert_nil driver.instance.instance_variable_get(:@table_name_template)
     assert_nil driver.instance.instance_variable_get(:@database_name)
   end
 
