@@ -96,7 +96,7 @@ class KustoE2ETest < Test::Unit::TestCase
     ingester.access_token
   end
 
-  def kusto_query(query, type = :data)
+  def kusto_query(query, type = :data, raise_on_error: false)
     endpoint = @engine_url
     path = type == :management ? '/v1/rest/mgmt' : '/v1/rest/query'
     uri = URI("#{endpoint}#{path}")
@@ -122,7 +122,10 @@ class KustoE2ETest < Test::Unit::TestCase
 
     response = http.request(request)
     unless response.code.to_i.between?(200, 299)
-      @logger.error("Kusto query failed with status #{response.code}: #{response.body}")
+      error_message = "Kusto query failed with status #{response.code}: #{response.body}"
+      @logger.error(error_message)
+      raise error_message if raise_on_error
+
       return []
     end
 
@@ -134,6 +137,8 @@ class KustoE2ETest < Test::Unit::TestCase
     rescue JSON::ParserError => e
       @logger.error("Failed to parse JSON: #{e}")
       @logger.error(response.body)
+      raise if raise_on_error
+
       []
     end
   end
@@ -493,9 +498,9 @@ class KustoE2ETest < Test::Unit::TestCase
     government_workload_identity = @auth_type == 'workload_identity' && government_clouds.include?(@azure_cloud)
     omit('Requires Azure US Government workload identity credentials') unless government_workload_identity
 
-    token = get_access_token
+    rows = kusto_query("print smoke_test = 'ok'", raise_on_error: true)
 
-    assert_not_empty token, 'Azure US Government workload identity did not return an access token'
+    assert_equal [['ok']], rows, 'Azure US Government workload identity could not query Kusto'
   end
 
   test 'basic_authentication_resilience' do
