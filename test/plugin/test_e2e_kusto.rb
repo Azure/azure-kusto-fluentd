@@ -490,8 +490,8 @@ class KustoE2ETest < Test::Unit::TestCase
   # Relaxed authentication resilience test
   test 'Azure US Government workload identity smoke' do
     government_clouds = %w[AzureUSGovernment AzureUSGovernmentCloud]
-    omit('Requires Azure US Government workload identity credentials') unless @auth_type == 'workload_identity' &&
-                                                                                government_clouds.include?(@azure_cloud)
+    government_workload_identity = @auth_type == 'workload_identity' && government_clouds.include?(@azure_cloud)
+    omit('Requires Azure US Government workload identity credentials') unless government_workload_identity
 
     token = get_access_token
 

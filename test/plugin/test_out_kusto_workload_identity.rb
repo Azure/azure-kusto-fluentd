@@ -8,6 +8,8 @@ require 'tempfile'
 require 'uri'
 
 class WorkloadIdentityTokenProviderTest < Test::Unit::TestCase
+  OUTPUT_CONFIGURATION_CLASS = OutputConfiguration
+
   def setup
     @token_file = Tempfile.new('federated-token')
     @token_file.write('federated-token-for-testing')
@@ -58,7 +60,7 @@ class WorkloadIdentityTokenProviderTest < Test::Unit::TestCase
   private
 
   def configuration_for(cloud)
-    OutputConfiguration.new(
+    OUTPUT_CONFIGURATION_CLASS.new(
       auth_type: 'workload_identity',
       azure_cloud: cloud,
       workload_identity_client_id: 'test-client',
