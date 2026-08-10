@@ -21,7 +21,8 @@ class WorkloadIdentity < AbstractTokenProvider
     @tenant_id = outconfiguration.workload_identity_tenant_id
     @token_file = outconfiguration.workload_identity_token_file_path || DEFAULT_TOKEN_FILE
     @kusto_endpoint = outconfiguration.kusto_endpoint
-    @token_request_uri = "#{outconfiguration.aad_endpoint}/#{@tenant_id}/oauth2/v2.0/token"
+    aad_endpoint = outconfiguration.aad_endpoint.chomp('/')
+    @token_request_uri = "#{aad_endpoint}/#{@tenant_id}/oauth2/v2.0/token"
     @scope = "#{@kusto_endpoint}/.default"
   end
 

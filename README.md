@@ -256,6 +256,8 @@ endpoint https://<cluster>.<region>.kusto.usgovcloudapi.net
 
 Existing configurations can also use `AzureUSGovernmentCloud` as an alias. When using `azcli` authentication, select the cloud before signing in with `az cloud set --name AzureUSGovernment`; the plugin's `azure_cloud` setting does not change Azure CLI's active cloud.
 
+`AzureGermanCloud` is not supported.
+
 ## Dynamic Table Name Resolution
 
 The plugin supports dynamic table name resolution using placeholders in the `table_name` parameter. This allows you to route logs to different tables based on the Fluentd tag.
