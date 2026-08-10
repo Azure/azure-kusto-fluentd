@@ -13,7 +13,8 @@ require 'logger'
 AZURE_CLOUDS = {
   'AzureCloud' => { 'aad' => 'https://login.microsoftonline.com' },
   'AzureChinaCloud' => { 'aad' => 'https://login.chinacloudapi.cn' },
-  'AzureUSGovernment' => { 'aad' => 'https://login.microsoftonline.us' }
+  'AzureUSGovernment' => { 'aad' => 'https://login.microsoftonline.us' },
+  'AzureUSGovernmentCloud' => { 'aad' => 'https://login.microsoftonline.us' }
 }.freeze
 
 class OutputConfiguration
