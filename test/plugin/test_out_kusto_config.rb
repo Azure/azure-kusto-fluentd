@@ -58,7 +58,8 @@ class KustoOutputConfigTest < Test::Unit::TestCase
     clouds = {
       'AzureCloud' => 'https://login.microsoftonline.com',
       'AzureChinaCloud' => 'https://login.chinacloudapi.cn',
-      'AzureUSGovernment' => 'https://login.microsoftonline.us'
+      'AzureUSGovernment' => 'https://login.microsoftonline.us',
+      'AzureUSGovernmentCloud' => 'https://login.microsoftonline.us'
     }
     base_conf_sym = @base_conf.transform_keys(&:to_sym)
     clouds.each do |cloud, aad_url|

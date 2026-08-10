@@ -37,6 +37,7 @@ class KustoE2ETest < Test::Unit::TestCase
     @tenant_id = ENV['TENANT_ID'] || ''
     @managed_identity_client_id = ENV['MANAGED_IDENTITY_CLIENT_ID'] || ''
     @auth_type = (ENV['AUTH_TYPE'] || 'aad').downcase
+    @azure_cloud = ENV['AZURE_CLOUD'] || 'AzureCloud'
     @wi_client_id = ENV['WI_CLIENT_ID'] || ''
     @wi_tenant_id = ENV['WI_TENANT_ID'] || ''
     @wi_token_file = ENV['WI_TOKEN_FILE'] || ''
@@ -58,7 +59,7 @@ class KustoE2ETest < Test::Unit::TestCase
       kusto_endpoint: @engine_url,
       database_name: @database,
       table_name: @table,
-      azure_cloud: 'AzureCloud'
+      azure_cloud: @azure_cloud
     }
 
     case @auth_type
@@ -228,6 +229,7 @@ class KustoE2ETest < Test::Unit::TestCase
       buffered #{config_options[:buffered]}
       delayed #{config_options[:delayed]}
       endpoint #{@engine_url}
+      azure_cloud #{@azure_cloud}
       database_name #{@database}
       table_name #{config_options[:table_name]}
       compression_enabled #{config_options[:compression_enabled]}
@@ -486,6 +488,16 @@ class KustoE2ETest < Test::Unit::TestCase
   end
 
   # Relaxed authentication resilience test
+  test 'Azure US Government workload identity smoke' do
+    government_clouds = %w[AzureUSGovernment AzureUSGovernmentCloud]
+    omit('Requires Azure US Government workload identity credentials') unless @auth_type == 'workload_identity' &&
+                                                                                government_clouds.include?(@azure_cloud)
+
+    token = get_access_token
+
+    assert_not_empty token, 'Azure US Government workload identity did not return an access token'
+  end
+
   test 'basic_authentication_resilience' do
     test_table = "FluentD_auth_basic_#{Time.now.to_i}"
     configure_and_start_driver(
