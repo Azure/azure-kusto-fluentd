@@ -149,6 +149,7 @@ Modern approach for Kubernetes/AKS workloads. Replaces the legacy Pod Identity s
 - `workload_identity_client_id`: The client ID for workload identity
 - `workload_identity_tenant_id`: The tenant ID for workload identity
 - `workload_identity_token_file_path`: Path to the workload identity token file (optional, defaults to `/var/run/secrets/azure/tokens/azure-identity-token`)
+- `azure_cloud`: The Azure cloud containing the identity and Kusto cluster
 
 ## Data Schema and Ingestion Mapping
 
@@ -239,8 +240,21 @@ This approach provides flexibility to transform the generic 3-column format into
 | `delayed` | Enable delayed commit for buffer chunks (requires `buffered: true`). | `false` |
 | `deferred_commit_timeout` | Max time (seconds) to wait for deferred commit verification. | `30` |
 | `ingestion_mapping_reference` | Name of a pre-defined ingestion mapping in Kusto for data transformation during ingestion. | _none_ |
-| `azure_cloud` | Azure cloud environment: `AzureCloud`, `AzureChinaCloud`, `AzureUSGovernmentCloud`, `AzureGermanCloud` | `AzureCloud` |
+| `azure_cloud` | Azure cloud environment: `AzureCloud`, `AzureChinaCloud`, or `AzureUSGovernment` (`AzureUSGovernmentCloud` is accepted as a compatibility alias) | `AzureCloud` |
 | `logger_path` | File path for plugin logs. If not set, logs to stdout. | stdout |
+
+### Sovereign Azure Clouds
+
+`azure_cloud` selects the Microsoft Entra authority used by `aad` and `workload_identity` authentication. It does not derive or rewrite the Kusto endpoint, so `endpoint` must be the full endpoint for the same cloud.
+
+For Azure US Government, use the canonical cloud name and the Government Kusto endpoint suffix:
+
+```conf
+azure_cloud AzureUSGovernment
+endpoint https://<cluster>.<region>.kusto.usgovcloudapi.net
+```
+
+Existing configurations can also use `AzureUSGovernmentCloud` as an alias. When using `azcli` authentication, select the cloud before signing in with `az cloud set --name AzureUSGovernment`; the plugin's `azure_cloud` setting does not change Azure CLI's active cloud.
 
 ## Dynamic Table Name Resolution
 
