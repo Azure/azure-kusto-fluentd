@@ -6,6 +6,11 @@ Follow these steps to set up workload identity on your system:
    - Ensure you have Azure CLI installed.
    - You need access to an Azure subscription and resource group.
    - Install kubectl if working with Kubernetes.
+   - Select the Azure CLI cloud before creating resources. For Azure US Government:
+     ```bash
+     az cloud set --name AzureUSGovernment
+     az login
+     ```
 
 2. **Create a User-Assigned Managed Identity**
    - You need to use a user-assigned managed identity for workload identity integration.
@@ -44,9 +49,18 @@ Follow these steps to set up workload identity on your system:
 6. **Create Federated Credential**
    - The subject claim identifies the Kubernetes service account that will use the federated credential. It typically follows the format: "system:serviceaccount:<namespace>:<service-account-name>".
    - Example subject claim: system:serviceaccount:default:my-service-account
+   - Select the token exchange audience for the Azure cloud:
+
+     | Azure cloud | Plugin `azure_cloud` | Token exchange audience |
+     | --- | --- | --- |
+     | Azure public | `AzureCloud` | `api://AzureADTokenExchange` |
+     | Azure US Government | `AzureUSGovernment` | `api://AzureADTokenExchangeUSGov` |
+     | Azure China | `AzureChinaCloud` | `api://AzureADTokenExchangeChina` |
+
    - ```bash
-     az identity federated-credential create --name <credential-name> --identity-name <identity-name> --resource-group <resource-group> --issuer <oidc-issuer-url> --subject <subject-claim>
+     az identity federated-credential create --name <credential-name> --identity-name <identity-name> --resource-group <resource-group> --issuer <oidc-issuer-url> --subject <subject-claim> --audiences <token-exchange-audience>
      ```
+   - The federated credential audience and the projected service account token audience must be identical.
 
 7. **Configure Your Application**
    - Update your application to use the managed identity and federated credential for authentication.
@@ -108,7 +122,7 @@ Follow these steps to set up workload identity on your system:
                  sources:
                    - serviceAccountToken:
                        path: azure-identity-token
-                       audience: api://AzureADTokenExchange
+                       audience: <token-exchange-audience>
                        expirationSeconds: 3600
      ```
    - Apply the deployment:
@@ -125,6 +139,22 @@ Follow these steps to set up workload identity on your system:
      ```bash
      kubectl logs <pod-name> --namespace <namespace>
      ```
+
+## Azure US Government Workload Identity Smoke Test
+
+The end-to-end test can validate an actual Azure US Government token exchange and Kusto connection. Run it with a projected token whose audience is `api://AzureADTokenExchangeUSGov`:
+
+```bash
+AZURE_CLOUD=AzureUSGovernment \
+AUTH_TYPE=workload_identity \
+CLUSTER=https://<cluster>.<region>.kusto.usgovcloudapi.net \
+DB=<database-name> \
+WI_CLIENT_ID=<workload-identity-client-id> \
+WI_TENANT_ID=<workload-identity-tenant-id> \
+WI_TOKEN_FILE=/var/run/secrets/azure/tokens/azure-identity-token \
+bundle exec rake test TEST="test/plugin/test_e2e_kusto.rb" \
+  TESTOPTS="--name=/Azure US Government workload identity smoke/"
+```
 
 Replace placeholders (e.g., <identity-name>, <resource-group>) with your actual values.
 

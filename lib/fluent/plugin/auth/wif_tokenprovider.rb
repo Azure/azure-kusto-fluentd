@@ -7,7 +7,6 @@ require_relative 'tokenprovider_base'
 
 class WorkloadIdentity < AbstractTokenProvider
   DEFAULT_TOKEN_FILE = '/var/run/secrets/azure/tokens/azure-identity-token'
-  AZURE_OAUTH2_TOKEN_ENDPOINT = 'https://login.microsoftonline.com/%<tenant_id>s/oauth2/v2.0/token'
 
   def initialize(outconfiguration)
     super(outconfiguration)
@@ -22,6 +21,8 @@ class WorkloadIdentity < AbstractTokenProvider
     @tenant_id = outconfiguration.workload_identity_tenant_id
     @token_file = outconfiguration.workload_identity_token_file_path || DEFAULT_TOKEN_FILE
     @kusto_endpoint = outconfiguration.kusto_endpoint
+    aad_endpoint = outconfiguration.aad_endpoint.chomp('/')
+    @token_request_uri = "#{aad_endpoint}/#{@tenant_id}/oauth2/v2.0/token"
     @scope = "#{@kusto_endpoint}/.default"
   end
 
@@ -35,7 +36,7 @@ class WorkloadIdentity < AbstractTokenProvider
 
   def acquire_workload_identity_token
     oidc_token = read_token_file_safely
-    uri = URI.parse(format(AZURE_OAUTH2_TOKEN_ENDPOINT, tenant_id: @tenant_id))
+    uri = URI.parse(@token_request_uri)
     req = Net::HTTP::Post.new(uri)
     req.set_form_data(
       'grant_type' => 'client_credentials',
