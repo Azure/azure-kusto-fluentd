@@ -8,7 +8,7 @@ This plugin allows you to send data from Fluentd to Azure Data Explorer (Kusto) 
 
 ## Requirements
 
-- Ruby 2.5 or later  
+- Ruby 3.2 or later
   Check version (Windows/Linux):
   ```bash
   ruby --version
@@ -21,18 +21,18 @@ This plugin allows you to send data from Fluentd to Azure Data Explorer (Kusto) 
   [Download RubyInstaller](https://rubyinstaller.org/)
   [Official Ruby installation guide](https://www.ruby-lang.org/en/documentation/installation/)
 
-- Fluentd v1.0 or later  
+- Fluentd v1.19.3 or later, but earlier than v2.0
   Check version (Windows/Linux):
   ```bash
   fluentd --version
   ```
   Install on Ubuntu/Linux:
   ```bash
-  gem install fluentd
+  gem install fluentd -v ">= 1.19.3, < 2"
   ```
   Install on Windows (in Command Prompt after Ruby is installed):
   ```cmd
-  gem install fluentd
+  gem install fluentd -v ">= 1.19.3, < 2"
   ```
   [Official Fluentd installation guide](https://docs.fluentd.org/installation)
 

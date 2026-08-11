@@ -56,7 +56,7 @@ jobs:
         working-directory: .
         
       - name: Install Fluentd
-        run: gem install fluentd
+        run: gem install fluentd -v ">= 1.19.3, < 2"
         
       - name: Install plugin
         run: gem install fluent-plugin-kusto-*.gem
