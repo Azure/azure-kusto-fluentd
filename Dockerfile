@@ -1,4 +1,4 @@
-FROM ruby:3.2
+FROM ruby:3.2.6
 
 WORKDIR /azure-kusto-fluentd
 
@@ -9,7 +9,7 @@ COPY Gemfile Gemfile.lock
 RUN if [ -f Gemfile ]; then bundle install; fi
 
 # Install Fluentd
-RUN gem install fluentd
+RUN gem install fluentd -v ">= 1.19.3, < 2"
 
 # Copy all plugin files except .env files (do NOT delete .conf files)
 COPY . ./
