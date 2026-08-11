@@ -50,7 +50,7 @@ $ gem install fluent-plugin-kusto
 Add the following line to your Gemfile:
 
 ```ruby
-gem "fluent-plugin-kusto", "~> 1.1.3"
+gem "fluent-plugin-kusto", "~> 1.1.4"
 ```
 
 And then execute:
@@ -461,7 +461,12 @@ This diagram shows the main components and data flow for the plugin, including c
 
 ## Release Notes
 
-### v1.1.3 (Latest)
+### v1.1.4 (Latest)
+- **Updated Fluentd to 1.19.3** - Addresses critical and high-severity security vulnerabilities in Fluentd
+- **Raised the minimum Ruby version to 3.2.6** - Aligns Ruby compatibility with Fluentd's `io-event` dependency
+- **Updated CI and Docker requirements** - Enforces supported Ruby and Fluentd versions across build and runtime environments
+
+### v1.1.3
 - **Fixed workload identity authentication in sovereign clouds** - The workload identity token provider now builds its token request from the configured `azure_cloud` AAD endpoint instead of always calling the public `login.microsoftonline.com` endpoint, unblocking Azure US Government and Azure China deployments
 - **Added `AzureUSGovernmentCloud` as a recognized `azure_cloud` value** - Accepted alongside the existing `AzureUSGovernment` alias so common Azure US Government naming works out of the box
 - **Added workload identity sovereign cloud test coverage** - New unit tests assert the token endpoint is derived per cloud, plus E2E coverage for the sovereign workload identity flow
