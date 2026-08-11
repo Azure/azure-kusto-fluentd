@@ -50,7 +50,7 @@ $ gem install fluent-plugin-kusto
 Add the following line to your Gemfile:
 
 ```ruby
-gem "fluent-plugin-kusto", "~> 1.1.2"
+gem "fluent-plugin-kusto", "~> 1.1.3"
 ```
 
 And then execute:
@@ -461,7 +461,12 @@ This diagram shows the main components and data flow for the plugin, including c
 
 ## Release Notes
 
-### v1.1.2 (Latest)
+### v1.1.3 (Latest)
+- **Fixed workload identity authentication in sovereign clouds** - The workload identity token provider now builds its token request from the configured `azure_cloud` AAD endpoint instead of always calling the public `login.microsoftonline.com` endpoint, unblocking Azure US Government and Azure China deployments
+- **Added `AzureUSGovernmentCloud` as a recognized `azure_cloud` value** - Accepted alongside the existing `AzureUSGovernment` alias so common Azure US Government naming works out of the box
+- **Added workload identity sovereign cloud test coverage** - New unit tests assert the token endpoint is derived per cloud, plus E2E coverage for the sovereign workload identity flow
+
+### v1.1.2
 - **Fixed deferred commit with dynamic table names** - Resolved table names are now correctly passed through to `check_data_on_server`, fixing broken ingestion verification when using placeholder-based table names with `delayed: true`
 - **Improved edge case handling** - Out-of-bounds tag part indices and nil/empty tags now correctly resolve to `"unknown"` fallback instead of empty strings
 - **Added regression tests** - New test coverage for deferred commit + dynamic table name combination
