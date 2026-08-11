@@ -1,4 +1,4 @@
-FROM ruby:3.2
+FROM ruby:3.2.6
 
 WORKDIR /azure-kusto-fluentd
 

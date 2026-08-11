@@ -16,7 +16,7 @@ Gem::Specification.new do |spec|
   spec.homepage      = 'https://github.com/Azure/azure-kusto-fluentd'
   spec.license       = 'Apache-2.0'
 
-  spec.required_ruby_version = '>= 3.2.0'
+  spec.required_ruby_version = '>= 3.2.6'
 
   spec.files         = Dir['lib/**/*.rb', 'test/**/*', 'README.md', 'LICENSE', 'Gemfile']
   spec.test_files    = spec.files.grep(%r{^(test|spec|features)/})
