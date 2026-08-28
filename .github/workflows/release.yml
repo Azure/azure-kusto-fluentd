@@ -16,10 +16,10 @@ jobs:
     environment: build
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Set up Ruby
-        uses: ruby/setup-ruby@v1
+        uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # v1.321.0
         with:
           ruby-version: '3.2.6'
           bundler-cache: true
@@ -29,7 +29,7 @@ jobs:
         working-directory: .
 
       - name: Publish gem to RubyGems
-        uses: dawidd6/action-publish-gem@v1
+        uses: dawidd6/action-publish-gem@c4713bf1595e0686322d6cf6c1a1c0dcaeca55de # v1.2.0
         with:
           api_key: ${{ secrets.RUBYGEMS_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
