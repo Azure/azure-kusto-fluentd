@@ -1,14 +1,49 @@
-# Temporary Azure Pipelines bootstrap for .github/workflows/build-and-e2e.yml
-
 trigger:
-- main
+  branches:
+    include:
+    - main
 
 pr:
-- main
+  branches:
+    include:
+    - main
 
 pool:
   vmImage: ubuntu-latest
 
-steps:
-- script: echo "Hello from Azure Pipelines"
-  displayName: Hello world
+variables:
+- group: azure-kusto-fluentd-e2e
+
+jobs:
+- job: E2E
+  displayName: Run authenticated Kusto E2E tests
+  timeoutInMinutes: 30
+  condition: and(succeeded(), ne(variables['System.PullRequest.IsFork'], 'True'))
+  steps:
+  - checkout: self
+    clean: true
+
+  - task: UseRubyVersion@0
+    displayName: Use Ruby 3.2
+    inputs:
+      versionSpec: '3.2'
+      addToPath: true
+
+  - bash: |
+      bundle config set --local frozen false
+      bundle config set --local deployment false
+      bundle install
+    displayName: Install dependencies
+
+  - task: AzureCLI@2
+    displayName: Run Kusto E2E tests
+    timeoutInMinutes: 15
+    inputs:
+      azureSubscription: $(AZURE_SERVICE_CONNECTION)
+      scriptType: bash
+      scriptLocation: inlineScript
+      inlineScript: bundle exec rake test TEST="test/plugin/test_e2e_kusto.rb"
+    env:
+      AUTH_TYPE: azcli
+      CLUSTER: $(CLUSTER)
+      DB: $(DB)
