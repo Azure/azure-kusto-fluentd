@@ -41,11 +41,6 @@ jobs:
   - bash: gem build fluent-plugin-kusto.gemspec
     displayName: Build gem
 
-  - bash: |
-      gem install fluentd -v ">= 1.19.3, < 2"
-      gem install fluent-plugin-kusto-*.gem
-    displayName: Install Fluentd and plugin
-
   - task: AzureCLI@2
     displayName: Run Kusto E2E tests
     condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
@@ -58,3 +53,8 @@ jobs:
       AUTH_TYPE: azcli
       CLUSTER: $(CLUSTER)
       DB: $(DB)
+
+  - bash: |
+      gem install fluentd -v ">= 1.19.3, < 2"
+      gem install fluent-plugin-kusto-*.gem
+    displayName: Install Fluentd and plugin
