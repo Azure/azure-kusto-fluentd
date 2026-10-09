@@ -1,14 +1,60 @@
-# Temporary Azure Pipelines bootstrap for .github/workflows/build-and-e2e.yml
-
 trigger:
-- main
+  branches:
+    include:
+    - main
 
 pr:
-- main
+  branches:
+    include:
+    - main
 
 pool:
   vmImage: ubuntu-latest
 
-steps:
-- script: echo "Hello from Azure Pipelines"
-  displayName: Hello world
+variables:
+- group: azure-kusto-fluentd-e2e
+
+jobs:
+- job: BuildAndTest
+  displayName: Build, test, and package
+  timeoutInMinutes: 30
+  steps:
+  - checkout: self
+    clean: true
+
+  - task: UseRubyVersion@0
+    displayName: Use Ruby 3.2
+    inputs:
+      versionSpec: '3.2'
+      addToPath: true
+
+  - bash: |
+      bundle config set --local frozen false
+      bundle config set --local deployment false
+      bundle install
+    displayName: Install dependencies
+
+  - bash: bundle exec rake test TEST="test/plugin/test_out_kusto_*.rb"
+    displayName: Run unit tests
+    timeoutInMinutes: 10
+
+  - bash: gem build fluent-plugin-kusto.gemspec
+    displayName: Build gem
+
+  - bash: |
+      gem install fluentd -v ">= 1.19.3, < 2"
+      gem install fluent-plugin-kusto-*.gem
+    displayName: Install Fluentd and plugin
+
+  - task: AzureCLI@2
+    displayName: Run Kusto E2E tests
+    condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
+    inputs:
+      azureSubscription: $(AZURE_SERVICE_CONNECTION)
+      scriptType: bash
+      scriptLocation: inlineScript
+      inlineScript: bundle exec rake test TEST="test/plugin/test_e2e_kusto.rb"
+    env:
+      AUTH_TYPE: azcli
+      CLUSTER: $(CLUSTER)
+      DB: $(DB)
