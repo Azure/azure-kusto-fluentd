@@ -3,7 +3,10 @@ trigger:
     include:
     - main
 
-pr: none
+pr:
+  branches:
+    include:
+    - main
 
 pool:
   vmImage: ubuntu-latest
@@ -15,14 +18,7 @@ jobs:
 - job: E2E
   displayName: Run authenticated Kusto E2E tests
   timeoutInMinutes: 30
-  condition: |
-    and(
-      succeeded(),
-      or(
-        eq(variables['Build.SourceBranch'], 'refs/heads/main'),
-        eq(variables['Build.Reason'], 'Manual')
-      )
-    )
+  condition: and(succeeded(), ne(variables['System.PullRequest.IsFork'], 'True'))
   steps:
   - checkout: self
     clean: true
