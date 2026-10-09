@@ -38,6 +38,8 @@ jobs:
       - name: Run unit tests
         run: bundle exec rake test TEST="test/plugin/test_out_kusto_*.rb"
         timeout-minutes: 10
+        env:
+          JUNIT_XML_OUTPUT: test-results.xml
 
       - name: Build gem
         run: gem build fluent-plugin-kusto.gemspec
