@@ -3,10 +3,7 @@ trigger:
     include:
     - main
 
-pr:
-  branches:
-    include:
-    - main
+pr: none
 
 pool:
   vmImage: ubuntu-latest
@@ -15,9 +12,10 @@ variables:
 - group: azure-kusto-fluentd-e2e
 
 jobs:
-- job: BuildAndTest
-  displayName: Build, test, and package
+- job: E2E
+  displayName: Run authenticated Kusto E2E tests
   timeoutInMinutes: 30
+  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
   steps:
   - checkout: self
     clean: true
@@ -34,16 +32,9 @@ jobs:
       bundle install
     displayName: Install dependencies
 
-  - bash: bundle exec rake test TEST="test/plugin/test_out_kusto_*.rb"
-    displayName: Run unit tests
-    timeoutInMinutes: 10
-
-  - bash: gem build fluent-plugin-kusto.gemspec
-    displayName: Build gem
-
   - task: AzureCLI@2
     displayName: Run Kusto E2E tests
-    condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
+    timeoutInMinutes: 15
     inputs:
       azureSubscription: $(AZURE_SERVICE_CONNECTION)
       scriptType: bash
@@ -53,8 +44,3 @@ jobs:
       AUTH_TYPE: azcli
       CLUSTER: $(CLUSTER)
       DB: $(DB)
-
-  - bash: |
-      gem install fluentd -v ">= 1.19.3, < 2"
-      gem install fluent-plugin-kusto-*.gem
-    displayName: Install Fluentd and plugin

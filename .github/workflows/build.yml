@@ -1,0 +1,58 @@
+name: CI Build
+
+on:
+  push:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+
+jobs:
+  build:
+    name: Build and test Fluentd plugin
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # v1.321.0
+        with:
+          ruby-version: '3.2.6'
+          bundler-cache: true
+          cache-version: 1
+
+      - name: Configure bundler
+        run: |
+          bundle config set --local frozen false
+          bundle config set --local deployment false
+
+      - name: Install dependencies
+        run: bundle install
+
+      - name: Run unit tests
+        run: bundle exec rake test TEST="test/plugin/test_out_kusto_*.rb"
+        timeout-minutes: 10
+
+      - name: Build gem
+        run: gem build fluent-plugin-kusto.gemspec
+
+      - name: Install Fluentd
+        run: gem install fluentd -v ">= 1.19.3, < 2"
+
+      - name: Install plugin
+        run: gem install fluent-plugin-kusto-*.gem
+
+      - name: Publish unit test results
+        uses: EnricoMi/publish-unit-test-result-action@d0a4676d0e0b938bc201470d88276b7c74c712b3 # v2.24.0
+        if: always()
+        with:
+          files: |
+            **/test-results.xml
+            **/rspec.xml
+            **/TEST-*.xml
