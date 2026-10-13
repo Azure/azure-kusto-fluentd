@@ -1,4 +1,4 @@
-FROM ruby:3.2.6
+FROM mcr.microsoft.com/devcontainers/ruby:1-3.2-bookworm@sha256:90380fc77c15d8261e054f7cc8ff81cbdd4c0d70955da2308e2d0465c71761be
 
 WORKDIR /azure-kusto-fluentd
 
