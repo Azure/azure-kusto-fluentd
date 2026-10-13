@@ -39,7 +39,7 @@ jobs:
     displayName: Run Kusto E2E tests
     timeoutInMinutes: 15
     inputs:
-      azureSubscription: $(AZURE_SERVICE_CONNECTION)
+      azureSubscription: kusto-connectors-arm-sc
       scriptType: bash
       scriptLocation: inlineScript
       inlineScript: bundle exec rake test TEST="test/plugin/test_e2e_kusto.rb"
